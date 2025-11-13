@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.*
+*.env
+
+# GCP keys
+gcp-key.json
+*-key.json
+*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Data
+#data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/sample/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Neo4j
+neo4j/
+
+# Others
+*.pkl
+*.h5
+*.csv
