@@ -12,8 +12,8 @@ from pypdf import PdfReader
 from docx import Document
 from bs4 import BeautifulSoup
 
-from config.config import DOCUMENT_CONFIG, DATA_DIR
-from src.utils.logger import log
+from config import DOCUMENT_CONFIG, DATA_DIR
+from logger import log
 
 
 class DocumentChunk:

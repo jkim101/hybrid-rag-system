@@ -13,16 +13,16 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.rag.hybrid_rag import HybridRAG
-from src.advanced_features import (
+from hybrid_rag import HybridRAG
+from advanced_features import (
     StreamingResponseGenerator,
     AdvancedFusion,
     PerformanceMonitor
 )
-from src.neo4j_store import Neo4jGraphStore, Entity, Relationship
-from src.benchmarks import HybridRAGBenchmark, BenchmarkQuery
-from src.utils.document_loader import load_documents
-from config.config import DATA_DIR
+from neo4j_store import Neo4jGraphStore, Entity, Relationship
+from benchmarks import HybridRAGBenchmark, BenchmarkQuery
+from document_loader import load_documents
+from config import DATA_DIR
 
 print("=" * 70)
 print("HYBRID RAG SYSTEM - ADVANCED FEATURES DEMO")

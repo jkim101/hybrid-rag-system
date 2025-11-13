@@ -7,11 +7,11 @@ Implements multiple fusion strategies and reranking
 from typing import List, Dict, Any, Optional
 import google.generativeai as genai
 
-from config.config import GEMINI_CONFIG, HYBRID_RAG_CONFIG
-from src.vector.vector_rag import VectorRAG
-from src.graph.graph_rag import KnowledgeGraph
-from src.utils.logger import log
-from src.utils.document_loader import DocumentChunk
+from config import GEMINI_CONFIG, HYBRID_RAG_CONFIG
+from vector_rag import VectorRAG
+from graph_rag import KnowledgeGraph
+from logger import log
+from document_loader import DocumentChunk
 
 
 class HybridRAG:

@@ -13,14 +13,14 @@ import networkx as nx
 from pyvis.network import Network
 import google.generativeai as genai
 
-from config.config import (
+from config import (
     GRAPH_CONFIG,
     GEMINI_CONFIG,
     HYBRID_RAG_CONFIG,
     BASE_DIR
 )
-from src.utils.logger import log
-from src.utils.document_loader import DocumentChunk
+from logger import log
+from document_loader import DocumentChunk
 
 
 class KnowledgeGraph:

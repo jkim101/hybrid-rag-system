@@ -7,11 +7,11 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.utils.document_loader import DocumentLoader, DocumentChunk
-from src.vector.vector_rag import VectorRAG
-from src.graph.graph_rag import KnowledgeGraph
-from src.rag.hybrid_rag import HybridRAG
-from src.utils.logger import log
+from document_loader import DocumentLoader, DocumentChunk
+from vector_rag import VectorRAG
+from graph_rag import KnowledgeGraph
+from hybrid_rag import HybridRAG
+from logger import log
 
 
 def test_document_loader():

@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 # Project imports
-from src.rag.hybrid_rag import HybridRAG
-from src.utils.document_loader import load_documents
+from hybrid_rag import HybridRAG
+from document_loader import load_documents
 
 
 # ============================================================================
