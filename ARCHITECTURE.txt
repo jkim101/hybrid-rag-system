@@ -1,0 +1,171 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║                   HYBRID RAG SYSTEM ARCHITECTURE                         ║
+║                    with A2A Protocol Support                             ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          USER INTERFACE                                  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐         │
+│  │   CLI (main.py) │  │  A2A API Server │  │  Python Library │         │
+│  │   Interactive   │  │  (FastAPI)      │  │  Import & Use   │         │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘         │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     HYBRID RAG ORCHESTRATOR                              │
+│                      (src/rag/hybrid_rag.py)                             │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │ • Query Processing      • Result Fusion                          │   │
+│  │ • Multi-source Retrieval • LLM Reranking                         │   │
+│  │ • Context Assembly      • Response Generation                    │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+              │                                          │
+              │                                          │
+              ▼                                          ▼
+┌──────────────────────────────┐      ┌──────────────────────────────────┐
+│      VECTOR RAG              │      │     KNOWLEDGE GRAPH RAG          │
+│  (src/vector/vector_rag.py)  │      │   (src/graph/graph_rag.py)      │
+│                               │      │                                  │
+│  ┌────────────────────────┐  │      │  ┌────────────────────────────┐ │
+│  │ Sentence Transformers  │  │      │  │  Entity Extraction         │ │
+│  │ 384-dim Embeddings     │  │      │  │  (Gemini 2.5 Pro)          │ │
+│  └────────────────────────┘  │      │  └────────────────────────────┘ │
+│              │                │      │              │                  │
+│              ▼                │      │              ▼                  │
+│  ┌────────────────────────┐  │      │  ┌────────────────────────────┐ │
+│  │ ChromaDB               │  │      │  │  Relationship Detection    │ │
+│  │ - HNSW Indexing        │  │      │  │  (Gemini 2.5 Pro)          │ │
+│  │ - Cosine Similarity    │  │      │  └────────────────────────────┘ │
+│  │ - Fast ANN Search      │  │      │              │                  │
+│  └────────────────────────┘  │      │              ▼                  │
+│              │                │      │  ┌────────────────────────────┐ │
+│              ▼                │      │  │ NetworkX Graph             │ │
+│  ┌────────────────────────┐  │      │  │ - Node Storage             │ │
+│  │ Top-K Results          │  │      │  │ - Edge Storage             │ │
+│  │ (Semantic Similarity)  │  │      │  │ - Multi-hop Traversal      │ │
+│  └────────────────────────┘  │      │  └────────────────────────────┘ │
+│                               │      │              │                  │
+└──────────────────────────────┘      │              ▼                  │
+                                       │  ┌────────────────────────────┐ │
+                                       │  │ Top-K Results              │ │
+                                       │  │ (Structured Reasoning)     │ │
+                                       │  └────────────────────────────┘ │
+                                       └──────────────────────────────────┘
+                                                      │
+                                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          FUSION LAYER                                    │
+│                                                                           │
+│  ┌───────────────┐  ┌───────────────┐  ┌────────────────┐              │
+│  │   Weighted    │  │      RRF      │  │     Simple     │              │
+│  │    Fusion     │  │  (Reciprocal  │  │  Concatenate   │              │
+│  │               │  │   Rank Fusion)│  │                │              │
+│  └───────────────┘  └───────────────┘  └────────────────┘              │
+│         │                   │                    │                      │
+│         └───────────────────┴────────────────────┘                      │
+│                             │                                            │
+│                             ▼                                            │
+│                  ┌──────────────────────┐                               │
+│                  │  LLM-Based Reranking │                               │
+│                  │  (Gemini 2.5 Pro)    │                               │
+│                  └──────────────────────┘                               │
+└─────────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    RESPONSE GENERATION                                   │
+│                      (Gemini 2.5 Pro)                                    │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │ Input:  Query + Top-K Contexts                                   │   │
+│  │ Output: Generated Answer + Source Citations                      │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        A2A PROTOCOL LAYER                                │
+│                     (src/agents/a2a_agent.py)                            │
+│                                                                           │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │ • Agent Card Publication    • Task Lifecycle Management          │   │
+│  │ • Message Handling          • Session Management                 │   │
+│  │ • Capability Discovery      • Error Handling                     │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                                                                           │
+│  Endpoints:                                                              │
+│  ├─ GET  /.well-known/agent-card.json  (Agent Discovery)                │
+│  ├─ POST /tasks                          (Task Creation)                 │
+│  ├─ GET  /tasks/{taskId}                (Task Status)                   │
+│  └─ GET  /health                        (Health Check)                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      DOCUMENT PROCESSING                                 │
+│                  (src/utils/document_loader.py)                          │
+│                                                                           │
+│  Input Formats: PDF │ DOCX │ TXT │ MD │ HTML                            │
+│                     │      │     │    │                                  │
+│  ┌──────────────────┴──────┴─────┴────┴────────────────────────────┐   │
+│  │               Hierarchical Text Chunking                         │   │
+│  │  • Paragraph-level splitting                                     │   │
+│  │  • Sentence-level splitting                                      │   │
+│  │  • Character-level fallback                                      │   │
+│  │  • Configurable overlap (default 50 chars)                       │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+│                              │                                            │
+│                              ▼                                            │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │          Document Chunks with Metadata                           │   │
+│  │  • Source file path                                              │   │
+│  │  • Chunk ID                                                      │   │
+│  │  • Character/word count                                          │   │
+│  │  • Document type                                                 │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                       SYSTEM COMPONENTS SUMMARY                          ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  Component            │ Technology        │ Purpose                      ║
+╠═══════════════════════╪═══════════════════╪══════════════════════════════╣
+║  Vector RAG           │ ChromaDB          │ Semantic similarity search   ║
+║  Knowledge Graph      │ NetworkX          │ Structured reasoning         ║
+║  Embeddings           │ Sentence Trans.   │ Text vectorization           ║
+║  LLM                  │ Gemini 2.5 Pro    │ Generation & extraction      ║
+║  API Server           │ FastAPI           │ A2A protocol interface       ║
+║  Document Processing  │ PyPDF, python-docx│ Multi-format ingestion       ║
+║  Logging              │ Loguru            │ Structured logging           ║
+║  Configuration        │ Python Dict/YAML  │ System settings              ║
+╚══════════════════════╧═══════════════════╧══════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                         DATA FLOW SUMMARY                                ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║                                                                           ║
+║  Documents → Chunks → [Vector DB | Knowledge Graph]                      ║
+║                            ↓            ↓                                 ║
+║  Query → [Vector Search | Graph Search]                                  ║
+║                     ↓                                                     ║
+║             Fusion & Reranking                                            ║
+║                     ↓                                                     ║
+║          Response Generation (Gemini)                                     ║
+║                     ↓                                                     ║
+║          Answer + Citations + Sources                                     ║
+║                                                                           ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+╔══════════════════════════════════════════════════════════════════════════╗
+║                        PROJECT STATISTICS                                ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  • Total Lines of Code: ~5,000 lines                                     ║
+║  • Python Modules: 17 files                                              ║
+║  • Documentation: 3 comprehensive guides                                 ║
+║  • Examples: 7 working examples                                          ║
+║  • Tests: Full component test suite                                      ║
+║  • Configuration: Centralized, modular                                   ║
+║  • Comments: Extensive inline documentation                              ║
+╚══════════════════════════════════════════════════════════════════════════╝
