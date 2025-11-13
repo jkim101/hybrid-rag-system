@@ -15,9 +15,9 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.rag.hybrid_rag import HybridRAG
-from src.utils.document_loader import load_documents
-from src.utils.logger import log
+from hybrid_rag import HybridRAG
+from document_loader import load_documents
+from logger import log
 
 
 def example_basic_usage():

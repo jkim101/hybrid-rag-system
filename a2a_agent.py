@@ -12,9 +12,9 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import uuid
 
-from config.config import A2A_CONFIG
-from src.rag.hybrid_rag import HybridRAG
-from src.utils.logger import log
+from config import A2A_CONFIG
+from hybrid_rag import HybridRAG
+from logger import log
 
 
 # ============================================================================

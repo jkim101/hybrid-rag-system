@@ -7,14 +7,11 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from config.config import DATA_DIR, A2A_CONFIG
-from src.utils.logger import log
-from src.utils.document_loader import load_documents
-from src.rag.hybrid_rag import HybridRAG
-from src.agents.a2a_agent import A2ATeachingAgent
+from config import DATA_DIR, A2A_CONFIG
+from logger import log
+from document_loader import load_documents
+from hybrid_rag import HybridRAG
+from a2a_agent import A2ATeachingAgent
 
 
 def ingest_documents(hybrid_rag: HybridRAG, data_path: str) -> None:

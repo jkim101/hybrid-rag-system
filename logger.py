@@ -6,7 +6,7 @@ Provides centralized logging configuration using loguru
 import sys
 from pathlib import Path
 from loguru import logger
-from config.config import LOGGING_CONFIG, BASE_DIR
+from config import LOGGING_CONFIG, BASE_DIR
 
 
 def setup_logger():

@@ -11,9 +11,9 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
-from config.config import EMBEDDING_CONFIG, VECTOR_DB_CONFIG, HYBRID_RAG_CONFIG
-from src.utils.logger import log
-from src.utils.document_loader import DocumentChunk
+from config import EMBEDDING_CONFIG, VECTOR_DB_CONFIG, HYBRID_RAG_CONFIG
+from logger import log
+from document_loader import DocumentChunk
 
 
 class VectorRAG:
