@@ -1,0 +1,17 @@
+[
+    {
+        "query": "What are the benefits of machine learning?",
+        "relevant_doc_ids": ["doc_0_0", "doc_0_1"],
+        "ground_truth": "Machine learning offers several benefits including automation of complex tasks, pattern recognition in large datasets, and continuous improvement through learning from data."
+    },
+    {
+        "query": "How does deep learning differ from traditional machine learning?",
+        "relevant_doc_ids": ["doc_1_0", "doc_1_2"],
+        "ground_truth": "Deep learning uses neural networks with multiple layers to automatically learn hierarchical features, while traditional machine learning often requires manual feature engineering."
+    },
+    {
+        "query": "What is supervised learning?",
+        "relevant_doc_ids": ["doc_2_0"],
+        "ground_truth": "Supervised learning is a machine learning approach where models are trained on labeled data to learn the relationship between input features and output labels."
+    }
+]

@@ -1,0 +1,29 @@
+
+Machine Learning Overview
+
+Machine Learning (ML) is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed.
+
+Types of Machine Learning:
+
+1. Supervised Learning
+   - Learn from labeled training data
+   - Examples: Classification, Regression
+   - Algorithms: Linear Regression, Decision Trees, Neural Networks
+
+2. Unsupervised Learning
+   - Find patterns in unlabeled data
+   - Examples: Clustering, Dimensionality Reduction
+   - Algorithms: K-Means, PCA, Autoencoders
+
+3. Reinforcement Learning
+   - Learn through trial and error with rewards
+   - Examples: Game playing, Robotics
+   - Algorithms: Q-Learning, Policy Gradients
+
+Common Applications:
+- Image Recognition
+- Natural Language Processing
+- Recommendation Systems
+- Fraud Detection
+- Autonomous Vehicles
+                    
