@@ -1,0 +1,40 @@
+
+Common Data Structures
+
+Data structures are ways of organizing and storing data efficiently.
+
+1. Arrays
+   - Fixed-size sequential collection
+   - Fast access by index: O(1)
+   - Insertion/deletion: O(n)
+
+2. Linked Lists
+   - Dynamic size with nodes
+   - Sequential access: O(n)
+   - Insertion/deletion: O(1) with pointer
+
+3. Stacks
+   - Last-In-First-Out (LIFO)
+   - Operations: push, pop, peek
+   - Use cases: Function calls, undo operations
+
+4. Queues
+   - First-In-First-Out (FIFO)
+   - Operations: enqueue, dequeue
+   - Use cases: Task scheduling, BFS
+
+5. Hash Tables
+   - Key-value pairs
+   - Average access: O(1)
+   - Use cases: Dictionaries, caching
+
+6. Trees
+   - Hierarchical structure
+   - Binary trees, BST, AVL, Red-Black
+   - Use cases: File systems, databases
+
+7. Graphs
+   - Nodes connected by edges
+   - Directed/Undirected
+   - Use cases: Social networks, maps
+                    

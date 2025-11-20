@@ -1,0 +1,23 @@
+
+Python Programming Basics
+
+Python is a high-level, interpreted programming language known for its simplicity and readability.
+
+Key Features:
+1. Easy to Learn: Python has a simple syntax that mimics natural language.
+2. Versatile: Used in web development, data science, AI, automation, and more.
+3. Large Standard Library: Comes with many built-in modules and functions.
+4. Dynamic Typing: Variables don't need explicit type declarations.
+
+Example Code:
+# Print hello world
+print("Hello, World!")
+
+# Define a function
+def greet(name):
+    return f"Hello, {name}!"
+
+# Use the function
+message = greet("Python")
+print(message)
+                    

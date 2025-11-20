@@ -1,0 +1,16 @@
+[
+    {
+        "query": "What is Daily Summary?",
+        "relevant_doc_ids": [
+            "doc_0_0"
+        ],
+        "ground_truth": "Daily Summary is a transformation that uses Trip Summary as a source. It has a similar structure to the trip summary, book-ending \"day start\" and \"day end\" values based on the values from the first trip of the day and the values from the last trip of the day."
+    },
+    {
+        "query": "How does Daily Summary transform the trip summary?",
+        "relevant_doc_ids": [
+            "doc_0_0"
+        ],
+        "ground_truth": "The Daily Summary transformation uses Trip Summary as a source. It has a similar structure to the trip summary, book-ending \"day start\" and \"day end\" values based on the values from the first trip of the day and the values from the last trip of the day.."
+    }
+]
