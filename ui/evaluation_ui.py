@@ -7,6 +7,8 @@ Features:
 - Display comprehensive metrics
 - Compare different approaches
 - Export evaluation results
+- Communication Evaluation (Teacher-Student-Examiner)
+- RAGAS Evaluation (Faithfulness, Relevancy, etc.)
 """
 
 import streamlit as st
@@ -16,12 +18,15 @@ from pathlib import Path
 import json
 import pandas as pd
 import time
+import glob
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ragc_core import VectorRAG, GraphRAG, HybridRAG, RAGConfig, DocumentProcessor
 from evaluation import RAGEvaluator
+from evaluation.communication_evaluator import CommunicationEvaluator
+from evaluation.ragas_evaluator import RagasEvaluator
 
 # Page configuration
 st.set_page_config(
@@ -72,16 +77,6 @@ st.markdown("""
         background-color: #f8f9fa;
     }
 
-    [data-testid="stSidebar"] * {
-        color: #2c3e50 !important;
-    }
-
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3 {
-        color: #1a202c !important;
-    }
-
     /* Main content text color */
     .stMarkdown, p, span, label {
         color: #2c3e50 !important;
@@ -104,72 +99,7 @@ st.markdown("""
     h1, h2, h3, h4, h5, h6 {
         color: #2c3e50 !important;
     }
-
-    /* Title styling */
-    .main-title {
-        color: #2c3e50 !important;
-        font-weight: bold;
-    }
-
-    /* Card borders */
-    .stTabs [data-baseweb="tab-panel"] {
-        background-color: #ffffff;
-    }
-
-    /* Tab text */
-    .stTabs [data-baseweb="tab"] {
-        color: #2c3e50 !important;
-    }
-
-    .stTabs [data-baseweb="tab"][aria-selected="true"] {
-        color: #1a202c !important;
-    }
-
-    /* Buttons */
-    .stButton > button {
-        background-color: #3b82f6;
-        color: white !important;
-        border: none;
-        font-weight: 600;
-    }
-
-    .stButton > button:hover {
-        background-color: #2563eb;
-        color: white !important;
-    }
-
-    /* Select boxes */
-    [data-baseweb="select"] * {
-        color: #2c3e50 !important;
-    }
-
-    [data-baseweb="select"] > div {
-        background-color: white !important;
-        border-color: #e9ecef !important;
-    }
-
-    /* Expander header */
-    [data-testid="stExpander"] summary {
-        color: #1a202c !important;
-        font-weight: 600;
-    }
-
-    /* Dataframe text */
-    .stDataFrame * {
-        color: #2c3e50 !important;
-    }
-
-    /* Caption text */
-    .css-16huue1, .css-1dp5vir {
-        color: #5a6c7d !important;
-    }
-
-    /* Metric card text */
-    .metric-card h4 {
-        color: #1a202c !important;
-        margin-bottom: 10px;
-    }
-
+    
     /* ==================== DARK MODE ==================== */
     @media (prefers-color-scheme: dark) {
         .stApp {
@@ -209,12 +139,6 @@ st.markdown("""
             color: #d1d5db !important;
         }
 
-        [data-testid="stSidebar"] h1,
-        [data-testid="stSidebar"] h2,
-        [data-testid="stSidebar"] h3 {
-            color: #f3f4f6 !important;
-        }
-
         /* Main content text color */
         .stMarkdown, p, span, label {
             color: #d1d5db !important;
@@ -236,92 +160,6 @@ st.markdown("""
         h1, h2, h3, h4, h5, h6 {
             color: #e5e7eb !important;
         }
-
-        /* Title styling */
-        .main-title {
-            color: #e5e7eb !important;
-        }
-
-        /* Card borders */
-        .stTabs [data-baseweb="tab-panel"] {
-            background-color: #1a1a1a;
-        }
-
-        /* Tab text */
-        .stTabs [data-baseweb="tab"] {
-            color: #d1d5db !important;
-        }
-
-        .stTabs [data-baseweb="tab"][aria-selected="true"] {
-            color: #f3f4f6 !important;
-        }
-
-        /* Buttons */
-        .stButton > button {
-            background-color: #3b82f6;
-            color: white !important;
-        }
-
-        .stButton > button:hover {
-            background-color: #2563eb;
-        }
-
-        /* Select boxes */
-        [data-baseweb="select"] * {
-            color: #d1d5db !important;
-        }
-
-        [data-baseweb="select"] > div {
-            background-color: #2d2d2d !important;
-            border-color: #404040 !important;
-        }
-
-        /* Expander header */
-        [data-testid="stExpander"] summary {
-            color: #e5e7eb !important;
-        }
-
-        [data-testid="stExpander"] {
-            background-color: #2d2d2d !important;
-            border-color: #404040 !important;
-        }
-
-        /* Dataframe text */
-        .stDataFrame * {
-            color: #d1d5db !important;
-        }
-
-        /* Caption text */
-        .css-16huue1, .css-1dp5vir {
-            color: #9ca3af !important;
-        }
-
-        /* Info/Warning/Success boxes */
-        .stAlert {
-            background-color: #2d2d2d !important;
-            border-color: #404040 !important;
-        }
-
-        /* File uploader */
-        [data-testid="stFileUploader"] {
-            background-color: #2d2d2d !important;
-            border-color: #404040 !important;
-        }
-
-        /* Progress bar */
-        .stProgress > div > div {
-            background-color: #3b82f6 !important;
-        }
-
-        /* Divider */
-        hr {
-            border-color: #404040 !important;
-        }
-
-        /* JSON display */
-        .stJson {
-            background-color: #2d2d2d !important;
-        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -331,6 +169,10 @@ if 'evaluation_results' not in st.session_state:
     st.session_state.evaluation_results = None
 if 'systems_initialized' not in st.session_state:
     st.session_state.systems_initialized = False
+if 'comm_eval_results' not in st.session_state:
+    st.session_state.comm_eval_results = None
+if 'ragas_results' not in st.session_state:
+    st.session_state.ragas_results = None
 
 
 def get_score_class(score: float) -> str:
@@ -371,281 +213,242 @@ def main():
             if api_key:
                 os.environ["GEMINI_API_KEY"] = api_key
         
-        st.markdown("## 📁 Data Preparation")
-        
-        # Document upload
-        st.markdown("### Upload Documents")
-        documents = st.file_uploader(
-            "Training Documents",
-            type=['pdf', 'docx', 'txt', 'md'],
-            accept_multiple_files=True
-        )
-        
-        # Evaluation dataset
-        st.markdown("### Evaluation Dataset")
-        eval_file = st.file_uploader(
-            "Evaluation JSON",
-            type=['json'],
-            help="JSON file with queries and ground truth"
-        )
-        
-        # System settings
-        st.markdown("## ⚙️ System Settings")
-        
-        systems_to_evaluate = st.multiselect(
-            "Systems to Evaluate",
-            ["Vector RAG", "Graph RAG", "Hybrid RAG"],
-            default=["Vector RAG", "Graph RAG", "Hybrid RAG"]
-        )
-        
-        chunk_size = st.slider("Chunk Size", 500, 2000, 1000)
-        top_k = st.slider("Top K", 1, 10, 5)
-        
-        # Initialize button
-        if st.button("🚀 Initialize Systems", use_container_width=True):
-            if not api_key:
-                st.error("Please provide API key")
-            elif not documents:
-                st.error("Please upload documents")
-            else:
-                with st.spinner("Initializing systems..."):
-                    # Save documents
-                    temp_dir = Path("./temp_eval")
-                    temp_dir.mkdir(exist_ok=True)
-                    
-                    file_paths = []
-                    for doc in documents:
-                        file_path = temp_dir / doc.name
-                        with open(file_path, "wb") as f:
-                            f.write(doc.getbuffer())
-                        file_paths.append(str(file_path))
-                    
-                    # Process documents
-                    processor = DocumentProcessor(chunk_size=chunk_size)
-                    chunks = processor.process_multiple_documents(file_paths)
-                    
-                    # Initialize systems
-                    config = RAGConfig(
-                        gemini_api_key=api_key,
-                        chunk_size=chunk_size,
-                        top_k=top_k
-                    )
-                    
-                    st.session_state.rag_systems = {}
-                    
-                    if "Vector RAG" in systems_to_evaluate:
-                        vector_rag = VectorRAG(config)
-                        vector_rag.add_documents(chunks)
-                        st.session_state.rag_systems["Vector RAG"] = vector_rag
-                    
-                    if "Graph RAG" in systems_to_evaluate:
-                        graph_rag = GraphRAG(config)
-                        graph_rag.add_documents(chunks)
-                        st.session_state.rag_systems["Graph RAG"] = graph_rag
-                    
-                    if "Hybrid RAG" in systems_to_evaluate:
-                        hybrid_rag = HybridRAG(config)
-                        hybrid_rag.add_documents(chunks)
-                        st.session_state.rag_systems["Hybrid RAG"] = hybrid_rag
-                    
-                    st.session_state.systems_initialized = True
-                    st.success(f"✅ Initialized {len(st.session_state.rag_systems)} systems")
+        st.markdown("---")
+        st.markdown("### 🤖 Agent Configuration")
+        agent_url = st.text_input("Agent URL", value="http://localhost:8000", help="URL of the Representative Agent")
+
+    # Main Tabs
+    tab1, tab2, tab3 = st.tabs(["🧪 Standard Eval", "🗣️ Communication Eval", "🤖 RAGAS Eval"])
     
-    # Main content
-    if not st.session_state.systems_initialized:
-        st.info("👈 Please configure and initialize systems in the sidebar")
-        return
-    
-    # Tabs
-    tab1, tab2, tab3 = st.tabs(["🧪 Run Evaluation", "📈 Results", "📊 Comparison"])
-    
-    # Tab 1: Run Evaluation
+    # ==================== Tab 1: Standard Evaluation ====================
     with tab1:
-        st.markdown("### Run Evaluation")
+        st.markdown("### Standard RAG Evaluation")
+        st.info("Evaluate Retrieval and Generation using standard metrics (Precision, Recall, Relevance, etc.)")
         
-        if eval_file:
-            # Load evaluation dataset
-            eval_file.seek(0)  # Reset file pointer
-            eval_data = json.load(eval_file)
-
-            # Validate it's a list
-            if not isinstance(eval_data, list):
-                st.error("❌ Evaluation file must contain a JSON array")
-                return
-
-            st.success(f"✅ Loaded evaluation dataset with {len(eval_data)} queries")
-
-            st.markdown("#### Preview")
-            # Display first 2 queries as preview
-            preview_count = min(2, len(eval_data))
-            for i in range(preview_count):
-                query_data = eval_data[i]
-                query_preview = query_data.get('query', 'No query')[:50]
-                with st.expander(f"Query {i+1}: {query_preview}..."):
-                    st.json(query_data)
-            
-            if st.button("▶️ Start Evaluation", use_container_width=True):
-                results = {}
-                
-                # Progress tracking
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                total_systems = len(st.session_state.rag_systems)
-                
-                for i, (system_name, rag_system) in enumerate(st.session_state.rag_systems.items()):
-                    status_text.text(f"Evaluating {system_name}...")
-                    
-                    # Initialize evaluator
-                    evaluator = RAGEvaluator()
-                    
-                    # Run evaluation
-                    system_results = evaluator.evaluate(rag_system, eval_data)
-                    results[system_name] = system_results
-                    
-                    progress = (i + 1) / total_systems
-                    progress_bar.progress(progress)
-                
-                status_text.empty()
-                st.session_state.evaluation_results = results
-                st.success("✅ Evaluation complete!")
-                st.balloons()
+        col1, col2 = st.columns([1, 2])
         
-        else:
-            st.warning("⚠️ Please upload an evaluation dataset (JSON format)")
+        with col1:
+            st.markdown("#### 1. Setup")
+            # Document upload
+            documents = st.file_uploader(
+                "Training Documents",
+                type=['pdf', 'docx', 'txt', 'md'],
+                accept_multiple_files=True,
+                key="std_docs"
+            )
             
-            with st.expander("📝 Dataset Format Example"):
-                example = [
-                    {
-                        "query": "What is machine learning?",
-                        "ground_truth": "Machine learning is a subset of AI...",
-                        "relevant_doc_ids": ["doc_0_0", "doc_0_1"]
-                    }
-                ]
-                st.json(example)
-    
-    # Tab 2: Results
+            # Evaluation dataset
+            eval_file = st.file_uploader(
+                "Evaluation JSON",
+                type=['json'],
+                help="JSON file with queries and ground truth",
+                key="std_eval_file"
+            )
+            
+            systems_to_evaluate = st.multiselect(
+                "Systems to Evaluate",
+                ["Vector RAG", "Graph RAG", "Hybrid RAG"],
+                default=["Vector RAG", "Graph RAG", "Hybrid RAG"]
+            )
+            
+            if st.button("🚀 Initialize & Run Standard Eval", use_container_width=True):
+                if not api_key:
+                    st.error("Please provide API key")
+                elif not documents:
+                    st.error("Please upload documents")
+                elif not eval_file:
+                    st.error("Please upload evaluation file")
+                else:
+                    with st.spinner("Running Standard Evaluation..."):
+                        # Save documents
+                        temp_dir = Path("./temp_eval")
+                        temp_dir.mkdir(exist_ok=True)
+                        
+                        file_paths = []
+                        for doc in documents:
+                            file_path = temp_dir / doc.name
+                            with open(file_path, "wb") as f:
+                                f.write(doc.getbuffer())
+                            file_paths.append(str(file_path))
+                        
+                        # Process documents
+                        processor = DocumentProcessor(chunk_size=1000)
+                        chunks = processor.process_multiple_documents(file_paths)
+                        
+                        # Initialize systems
+                        config = RAGConfig(gemini_api_key=api_key)
+                        rag_systems = {}
+                        
+                        if "Vector RAG" in systems_to_evaluate:
+                            vr = VectorRAG(config)
+                            vr.add_documents(chunks)
+                            rag_systems["Vector RAG"] = vr
+                        if "Graph RAG" in systems_to_evaluate:
+                            gr = GraphRAG(config)
+                            gr.add_documents(chunks)
+                            rag_systems["Graph RAG"] = gr
+                        if "Hybrid RAG" in systems_to_evaluate:
+                            hr = HybridRAG(config)
+                            hr.add_documents(chunks)
+                            rag_systems["Hybrid RAG"] = hr
+                            
+                        # Load eval data
+                        eval_file.seek(0)
+                        eval_data = json.load(eval_file)
+                        
+                        # Run evaluation
+                        results = {}
+                        evaluator = RAGEvaluator()
+                        
+                        for name, system in rag_systems.items():
+                            results[name] = evaluator.evaluate(system, eval_data)
+                            
+                        st.session_state.evaluation_results = results
+                        st.success("Evaluation Complete!")
+
+        with col2:
+            st.markdown("#### 2. Results")
+            if st.session_state.evaluation_results:
+                for system_name, results in st.session_state.evaluation_results.items():
+                    with st.expander(f"📊 {system_name} Results", expanded=True):
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.metric("Precision", f"{results['metrics']['average_precision']:.3f}")
+                        with c2:
+                            st.metric("Recall", f"{results['metrics']['average_recall']:.3f}")
+                        with c3:
+                            st.metric("Relevance", f"{results['generation_metrics']['average_relevance']:.3f}")
+            else:
+                st.info("Run evaluation to see results.")
+
+    # ==================== Tab 2: Communication Evaluation ====================
     with tab2:
-        st.markdown("### Evaluation Results")
+        st.markdown("### 🗣️ Communication Evaluation")
+        st.info("Evaluate how well the Representative Agent transfers knowledge to external agents (Teacher-Student-Examiner Loop).")
         
-        if st.session_state.evaluation_results:
-            for system_name, results in st.session_state.evaluation_results.items():
-                st.markdown(f"## {system_name}")
-                
-                # Overall metrics
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    avg_precision = results['metrics']['average_precision']
-                    st.markdown(f'<div class="metric-card">'
-                              f'<h4>Avg Precision</h4>'
-                              f'<p class="{get_score_class(avg_precision)}">{avg_precision:.3f}</p>'
-                              f'</div>', unsafe_allow_html=True)
-                
-                with col2:
-                    avg_recall = results['metrics']['average_recall']
-                    st.markdown(f'<div class="metric-card">'
-                              f'<h4>Avg Recall</h4>'
-                              f'<p class="{get_score_class(avg_recall)}">{avg_recall:.3f}</p>'
-                              f'</div>', unsafe_allow_html=True)
-                
-                with col3:
-                    avg_ndcg = results['metrics']['average_ndcg']
-                    st.markdown(f'<div class="metric-card">'
-                              f'<h4>Avg NDCG</h4>'
-                              f'<p class="{get_score_class(avg_ndcg)}">{avg_ndcg:.3f}</p>'
-                              f'</div>', unsafe_allow_html=True)
-                
-                with col4:
-                    avg_relevance = results['generation_metrics']['average_relevance']
-                    st.markdown(f'<div class="metric-card">'
-                              f'<h4>Avg Relevance</h4>'
-                              f'<p class="{get_score_class(avg_relevance)}">{avg_relevance:.3f}</p>'
-                              f'</div>', unsafe_allow_html=True)
-                
-                # Detailed metrics
-                with st.expander("📊 Detailed Metrics"):
-                    st.markdown("**Retrieval Metrics**")
-                    st.json(results['metrics'])
-                    
-                    st.markdown("**Generation Metrics**")
-                    st.json(results['generation_metrics'])
-                
-                st.markdown("---")
+        col1, col2 = st.columns([1, 2])
         
-        else:
-            st.info("No evaluation results yet. Run evaluation first.")
-    
-    # Tab 3: Comparison
+        with col1:
+            st.markdown("#### 1. Select Document")
+            # List documents in data/documents
+            doc_dir = Path("data/documents")
+            if doc_dir.exists():
+                available_docs = [str(p) for p in doc_dir.glob("*.*")]
+            else:
+                available_docs = []
+                
+            selected_doc = st.selectbox("Select Document to Test", available_docs)
+            
+            if st.button("▶️ Start Simulation", use_container_width=True):
+                if not selected_doc:
+                    st.error("Please select a document")
+                else:
+                    with st.spinner("Running Communication Simulation... (This may take a minute)"):
+                        try:
+                            evaluator = CommunicationEvaluator(agent_url=agent_url)
+                            results = evaluator.evaluate_communication(selected_doc)
+                            st.session_state.comm_eval_results = results
+                            st.success("Simulation Complete!")
+                        except Exception as e:
+                            st.error(f"Simulation failed: {e}")
+                            
+        with col2:
+            st.markdown("#### 2. Simulation Results")
+            if st.session_state.comm_eval_results:
+                results = st.session_state.comm_eval_results
+                avg_score = results.get('average_score', 0)
+                
+                st.markdown(f'<div class="metric-card" style="text-align:center">'
+                          f'<h3>Average Communication Score</h3>'
+                          f'<p class="{get_score_class(avg_score/10)}">{avg_score:.1f} / 10</p>'
+                          f'</div>', unsafe_allow_html=True)
+                
+                st.markdown("#### Detailed Interaction Log")
+                for i, detail in enumerate(results.get("details", [])):
+                    with st.expander(f"Q{i+1}: {detail['question']}", expanded=True):
+                        st.markdown(f"**🎓 Student Answer:**\n> {detail['student_answer']}")
+                        st.markdown(f"**✅ Ground Truth:**\n> {detail['ground_truth']}")
+                        st.markdown(f"**📝 Examiner Grade:** {detail['score']}/10")
+                        st.caption(f"Explanation: {detail['explanation']}")
+            else:
+                st.info("Select a document and start simulation to see results.")
+
+    # ==================== Tab 3: RAGAS Evaluation ====================
     with tab3:
-        st.markdown("### System Comparison")
+        st.markdown("### 🤖 RAGAS Evaluation")
+        st.info("Use RAGAS framework with Gemini as judge to evaluate Faithfulness, Context Precision, etc.")
         
-        if st.session_state.evaluation_results:
-            # Create comparison dataframe
-            comparison_data = []
-            
-            for system_name, results in st.session_state.evaluation_results.items():
-                comparison_data.append({
-                    "System": system_name,
-                    "Precision": results['metrics']['average_precision'],
-                    "Recall": results['metrics']['average_recall'],
-                    "F1 Score": results['metrics']['average_f1'],
-                    "NDCG": results['metrics']['average_ndcg'],
-                    "MRR": results['metrics']['average_mrr'],
-                    "MAP": results['metrics']['average_map'],
-                    "Relevance": results['generation_metrics']['average_relevance'],
-                    "Faithfulness": results['generation_metrics']['average_faithfulness'],
-                    "Completeness": results['generation_metrics']['average_completeness']
-                })
-            
-            df = pd.DataFrame(comparison_data)
-            
-            # Display comparison table
-            st.markdown("#### Overall Comparison")
-            st.dataframe(df.style.highlight_max(axis=0, subset=df.columns[1:]), use_container_width=True)
-            
-            # Bar charts for key metrics
-            st.markdown("#### Visual Comparison")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**Retrieval Metrics**")
-                chart_data = df[["System", "Precision", "Recall", "F1 Score"]].set_index("System")
-                st.bar_chart(chart_data)
-            
-            with col2:
-                st.markdown("**Generation Metrics**")
-                chart_data = df[["System", "Relevance", "Faithfulness", "Completeness"]].set_index("System")
-                st.bar_chart(chart_data)
-            
-            # Download results
-            st.markdown("#### Export Results")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                csv = df.to_csv(index=False)
-                st.download_button(
-                    "📥 Download CSV",
-                    csv,
-                    "evaluation_results.csv",
-                    "text/csv",
-                    use_container_width=True
-                )
-            
-            with col2:
-                json_str = json.dumps(st.session_state.evaluation_results, indent=2)
-                st.download_button(
-                    "📥 Download JSON",
-                    json_str,
-                    "evaluation_results.json",
-                    "application/json",
-                    use_container_width=True
-                )
+        col1, col2 = st.columns([1, 2])
         
-        else:
-            st.info("No evaluation results yet. Run evaluation first.")
+        with col1:
+            st.markdown("#### 1. Setup")
+            ragas_eval_file = st.file_uploader(
+                "Evaluation JSON (RAGAS)",
+                type=['json'],
+                key="ragas_file"
+            )
+            
+            if st.button("🚀 Run RAGAS Eval", use_container_width=True):
+                if not ragas_eval_file:
+                    st.error("Please upload evaluation file")
+                else:
+                    with st.spinner("Running RAGAS Evaluation..."):
+                        try:
+                            # Load data
+                            ragas_eval_file.seek(0)
+                            data = json.load(ragas_eval_file)
+                            
+                            # Prepare lists
+                            questions = [item['query'] for item in data]
+                            ground_truths = [[item['ground_truth']] for item in data]
+                            
+                            # We need answers and contexts. 
+                            # For this demo, we'll assume we query the Representative Agent to get them
+                            # or the user uploads a file with pre-generated answers.
+                            # Let's query the agent for now to make it dynamic.
+                            
+                            import requests
+                            answers = []
+                            contexts = []
+                            
+                            for q in questions:
+                                resp = requests.post(f"{agent_url}/query", json={"query": q})
+                                if resp.status_code == 200:
+                                    res_json = resp.json()
+                                    answers.append(res_json['answer'])
+                                    ctx = [d['text'] for d in res_json['retrieved_documents']]
+                                    contexts.append(ctx)
+                                else:
+                                    answers.append("Error")
+                                    contexts.append(["Error"])
+                            
+                            # Run RAGAS
+                            evaluator = RagasEvaluator(api_key=api_key)
+                            results = evaluator.evaluate(questions, answers, contexts, ground_truths)
+                            st.session_state.ragas_results = results
+                            st.success("RAGAS Evaluation Complete!")
+                            
+                        except Exception as e:
+                            st.error(f"RAGAS Eval failed: {e}")
+
+        with col2:
+            st.markdown("#### 2. RAGAS Metrics")
+            if st.session_state.ragas_results:
+                res = st.session_state.ragas_results
+                
+                # Display metrics in cards
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(f'<div class="metric-card"><h4>Faithfulness</h4><h2>{res["faithfulness"]:.3f}</h2></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-card"><h4>Context Precision</h4><h2>{res["context_precision"]:.3f}</h2></div>', unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f'<div class="metric-card"><h4>Answer Relevancy</h4><h2>{res["answer_relevancy"]:.3f}</h2></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-card"><h4>Context Recall</h4><h2>{res["context_recall"]:.3f}</h2></div>', unsafe_allow_html=True)
+                
+                st.markdown("#### Detailed Data")
+                st.dataframe(pd.DataFrame(res))
+            else:
+                st.info("Upload file and run evaluation to see RAGAS metrics.")
 
 
 if __name__ == "__main__":

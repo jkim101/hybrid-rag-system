@@ -12,7 +12,8 @@ from typing import List, Dict, Any, Optional
 import logging
 import chromadb
 from chromadb.config import Settings
-import google.generativeai as genai
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage
 
 from .config import RAGConfig
 
@@ -38,8 +39,20 @@ class VectorRAG:
         self.config = config or RAGConfig()
         self.config.validate()
         
-        # Configure Gemini API
-        genai.configure(api_key=self.config.gemini_api_key)
+        # Initialize Embeddings model
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model=self.config.embedding_model,
+            google_api_key=self.config.gemini_api_key,
+            task_type="retrieval_document"
+        )
+        
+        # Initialize Chat model
+        self.llm = ChatGoogleGenerativeAI(
+            model=self.config.model_name,
+            google_api_key=self.config.gemini_api_key,
+            temperature=self.config.temperature,
+            max_output_tokens=self.config.max_output_tokens
+        )
         
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(
@@ -67,12 +80,7 @@ class VectorRAG:
             List[float]: Embedding vector
         """
         try:
-            result = genai.embed_content(
-                model=self.config.embedding_model,
-                content=text,
-                task_type="retrieval_document"
-            )
-            return result['embedding']
+            return self.embeddings.embed_query(text)
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
             raise
@@ -189,16 +197,8 @@ Answer:"""
         
         # Generate response using Gemini
         try:
-            model = genai.GenerativeModel(self.config.model_name)
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=self.config.temperature,
-                    max_output_tokens=self.config.max_output_tokens
-                )
-            )
-            
-            answer = response.text
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            answer = response.content
             logger.info(f"Generated answer: {len(answer)} characters")
             return answer
             
