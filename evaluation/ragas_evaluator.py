@@ -42,7 +42,7 @@ class RagasEvaluator:
         # Initialize Gemini LLM and Embeddings for RAGAS
         # RAGAS uses these to judge the quality of answers
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash-exp",
             google_api_key=self.api_key,
             temperature=0
         )

@@ -13,6 +13,8 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
+from .agents import StudentAgent
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ class CommunicationEvaluator:
             raise ValueError("GEMINI_API_KEY is required")
         
         self.model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash-exp",
             google_api_key=self.api_key,
             temperature=0
         )
@@ -70,22 +72,6 @@ class CommunicationEvaluator:
             logger.error(f"Failed to generate questions: {e}")
             return []
 
-    def simulate_student_agent(self, question: str) -> str:
-        """
-        Simulate an external agent asking the Representative Agent (Student role)
-        """
-        try:
-            response = requests.post(
-                f"{self.agent_url}/query",
-                json={"query": question},
-                timeout=30
-            )
-            response.raise_for_status()
-            return response.json()["answer"]
-        except Exception as e:
-            logger.error(f"Student agent failed to query teacher: {e}")
-            return "I could not get an answer."
-
     def grade_answer(self, question: str, student_answer: str, ground_truth: str) -> Dict[str, Any]:
         """
         Grade the student's answer against ground truth (Examiner role)
@@ -98,7 +84,11 @@ class CommunicationEvaluator:
         Student Answer: {student_answer}
         
         Grade the student's answer on a scale of 0 to 10 based on how well it conveys the key information 
-        from the Ground Truth. Also provide a brief explanation.
+        from the Ground Truth. 
+        
+        CRITICAL: The student answer might be rephrased or summarized. 
+        Do NOT penalize for different wording if the core concept is correct.
+        Penalize if the answer is vague, incorrect, or missing key details.
         
         Output format (JSON):
         {{"score": 8, "explanation": "..."}}
@@ -116,41 +106,80 @@ class CommunicationEvaluator:
             logger.error(f"Grading failed: {e}")
             return {"score": 0, "explanation": "Grading failed"}
 
-    def evaluate_communication(self, doc_path: str) -> Dict[str, Any]:
+    def evaluate_communication(self, doc_path: str, student_persona: str = "Novice") -> Dict[str, Any]:
         """
         Run the full evaluation loop for a document
         """
-        logger.info(f"Evaluating communication for {doc_path}...")
+        logger.info(f"Evaluating communication for {doc_path} with persona: {student_persona}...")
         
         # 1. Read document
-        try:
-            with open(doc_path, 'r') as f:
-                doc_text = f.read()
-        except Exception as e:
-            return {"error": f"Failed to read file: {e}"}
+        # 1. Read document with encoding fallback
+        encodings = ['utf-8', 'euc-kr', 'cp949', 'latin1']
+        doc_text = None
+        read_error = None
+        
+        for enc in encodings:
+            try:
+                with open(doc_path, 'r', encoding=enc) as f:
+                    doc_text = f.read()
+                break
+            except UnicodeDecodeError:
+                continue
+            except Exception as e:
+                read_error = str(e)
+                break
+        
+        if doc_text is None:
+            return {"error": f"Failed to read file with tried encodings ({encodings}). Last error: {read_error}"}
             
         # 2. Generate questions (Examiner)
         qa_pairs = self.generate_questions_from_doc(doc_text)
         logger.info(f"Generated {len(qa_pairs)} test questions.")
         
+        # Initialize Student
+        student = StudentAgent(persona=student_persona, api_key=self.api_key)
+        
         results = []
         total_score = 0
         
         for item in qa_pairs:
-            q = item["question"]
+            exam_q = item["question"]
             gt = item["answer"]
             
-            # 3. Student asks Teacher
-            logger.info(f"Student asking: {q}")
-            student_ans = self.simulate_student_agent(q)
+            # 3. Student asks Teacher (Representative Agent)
+            # Student formulates their own question based on the exam topic
+            student_q = student.ask(exam_q)
+            logger.info(f"Student asking: {student_q}")
             
-            # 4. Examiner grades Student
-            grade = self.grade_answer(q, student_ans, gt)
+            # 4. Teacher answers
+            try:
+                response = requests.post(
+                    f"{self.agent_url}/query",
+                    json={"query": student_q},
+                    timeout=30
+                )
+                response.raise_for_status()
+                teacher_ans = response.json()["answer"]
+            except Exception as e:
+                logger.error(f"Teacher failed to answer: {e}")
+                teacher_ans = "I cannot answer that right now."
+            
+            # 5. Student learns (Digests answer)
+            student.learn(teacher_ans)
+            
+            # 6. Student takes Exam (Answers original question)
+            student_exam_ans = student.answer_exam(exam_q)
+            logger.info(f"Student Exam Answer: {student_exam_ans[:100]}...")
+            
+            # 7. Examiner grades Student
+            grade = self.grade_answer(exam_q, student_exam_ans, gt)
             logger.info(f"Grade: {grade['score']}/10")
             
             results.append({
-                "question": q,
-                "student_answer": student_ans,
+                "exam_question": exam_q,
+                "student_question": student_q,
+                "teacher_answer": teacher_ans,
+                "student_exam_answer": student_exam_ans,
                 "ground_truth": gt,
                 "score": grade["score"],
                 "explanation": grade["explanation"]
@@ -161,6 +190,7 @@ class CommunicationEvaluator:
         
         return {
             "document": doc_path,
+            "student_persona": student_persona,
             "average_score": avg_score,
             "details": results
         }

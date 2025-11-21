@@ -329,7 +329,7 @@ def main():
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            st.markdown("#### 1. Select Document")
+            st.markdown("#### 1. Select Documents")
             # List documents in data/documents
             doc_dir = Path("data/documents")
             if doc_dir.exists():
@@ -337,17 +337,56 @@ def main():
             else:
                 available_docs = []
                 
-            selected_doc = st.selectbox("Select Document to Test", available_docs)
+            # Multi-select for documents
+            selected_docs = st.multiselect(
+                "Select Documents to Test", 
+                available_docs,
+                help="Select one or more documents to evaluate."
+            )
+            
+            # Option to select all
+            if st.checkbox("Select All Documents"):
+                selected_docs = available_docs
+            
+            # Student Persona Selector
+            student_persona = st.selectbox(
+                "Select Student Persona",
+                [
+                    "Novice (Curious but knows nothing)", 
+                    "Expert (Skeptical and technical)", 
+                    "Child (Needs simple explanations)",
+                    "Manager (Needs high-level summaries)"
+                ],
+                index=0
+            )
+            
+            # Map selection to persona string
+            persona_map = {
+                "Novice (Curious but knows nothing)": "Novice",
+                "Expert (Skeptical and technical)": "Expert",
+                "Child (Needs simple explanations)": "Child",
+                "Manager (Needs high-level summaries)": "Manager"
+            }
+            selected_persona = persona_map[student_persona]
             
             if st.button("▶️ Start Simulation", use_container_width=True):
-                if not selected_doc:
-                    st.error("Please select a document")
+                if not selected_docs:
+                    st.error("Please select at least one document")
                 else:
-                    with st.spinner("Running Communication Simulation... (This may take a minute)"):
+                    with st.spinner(f"Running Communication Simulation on {len(selected_docs)} documents..."):
+                        all_results = []
+                        progress_bar = st.progress(0)
+                        
                         try:
                             evaluator = CommunicationEvaluator(agent_url=agent_url)
-                            results = evaluator.evaluate_communication(selected_doc)
-                            st.session_state.comm_eval_results = results
+                            
+                            for idx, doc_path in enumerate(selected_docs):
+                                st.text(f"Processing {os.path.basename(doc_path)}...")
+                                result = evaluator.evaluate_communication(doc_path, student_persona=selected_persona)
+                                all_results.append(result)
+                                progress_bar.progress((idx + 1) / len(selected_docs))
+                            
+                            st.session_state.comm_eval_results = all_results
                             st.success("Simulation Complete!")
                         except Exception as e:
                             st.error(f"Simulation failed: {e}")
@@ -355,23 +394,58 @@ def main():
         with col2:
             st.markdown("#### 2. Simulation Results")
             if st.session_state.comm_eval_results:
-                results = st.session_state.comm_eval_results
-                avg_score = results.get('average_score', 0)
+                results_list = st.session_state.comm_eval_results
+                
+                # Calculate overall average
+                total_avg = sum(r.get('average_score', 0) for r in results_list) / len(results_list)
                 
                 st.markdown(f'<div class="metric-card" style="text-align:center">'
-                          f'<h3>Average Communication Score</h3>'
-                          f'<p class="{get_score_class(avg_score/10)}">{avg_score:.1f} / 10</p>'
+                          f'<h3>Overall Communication Score</h3>'
+                          f'<p class="{get_score_class(total_avg/10)}">{total_avg:.1f} / 10</p>'
+                          f'<p>Evaluated {len(results_list)} documents</p>'
                           f'</div>', unsafe_allow_html=True)
                 
                 st.markdown("#### Detailed Interaction Log")
-                for i, detail in enumerate(results.get("details", [])):
-                    with st.expander(f"Q{i+1}: {detail['question']}", expanded=True):
-                        st.markdown(f"**🎓 Student Answer:**\n> {detail['student_answer']}")
-                        st.markdown(f"**✅ Ground Truth:**\n> {detail['ground_truth']}")
-                        st.markdown(f"**📝 Examiner Grade:** {detail['score']}/10")
-                        st.caption(f"Explanation: {detail['explanation']}")
+                
+                # Create tabs for each document if multiple
+                if len(results_list) > 1:
+                    # Use a safe way to get document name, defaulting to "Unknown" or "Error"
+                    tab_names = []
+                    for r in results_list:
+                        if 'document' in r:
+                            tab_names.append(os.path.basename(r['document']))
+                        else:
+                            tab_names.append("Error")
+                            
+                    doc_tabs = st.tabs(tab_names)
+                    for idx, tab in enumerate(doc_tabs):
+                        with tab:
+                            display_comm_results(results_list[idx])
+                else:
+                    display_comm_results(results_list[0])
             else:
-                st.info("Select a document and start simulation to see results.")
+                st.info("Select documents and start simulation to see results.")
+
+def display_comm_results(results):
+    """Helper to display results for a single document"""
+    # Check for error
+    if "error" in results:
+        st.error(f"Error processing document: {results['error']}")
+        return
+
+    avg = results.get('average_score', 0)
+    doc_name = os.path.basename(results.get('document', 'Unknown Document'))
+    st.markdown(f"**Document:** `{doc_name}` (Score: {avg:.1f}/10)")
+    
+    for i, detail in enumerate(results.get("details", [])):
+        with st.expander(f"Q{i+1}: {detail.get('exam_question', 'Unknown Question')}", expanded=True):
+            st.markdown(f"**📝 Exam Question:** {detail.get('exam_question', '')}")
+            st.markdown(f"**🗣️ Student Asked:** {detail.get('student_question', '')}")
+            st.info(f"**🤖 Teacher Answered:** {detail.get('teacher_answer', '')}")
+            st.markdown(f"**🎓 Student Exam Answer:**\n> {detail.get('student_exam_answer', '')}")
+            st.markdown(f"**✅ Ground Truth:**\n> {detail.get('ground_truth', '')}")
+            st.markdown(f"**📝 Examiner Grade:** {detail.get('score', 0)}/10")
+            st.caption(f"Explanation: {detail.get('explanation', '')}")
 
     # ==================== Tab 3: RAGAS Evaluation ====================
     with tab3:
