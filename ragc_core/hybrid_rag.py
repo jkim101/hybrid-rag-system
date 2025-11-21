@@ -1,15 +1,7 @@
-"""
-Hybrid RAG Module for Hybrid RAG System
-
-This module combines vector-based and graph-based retrieval:
-- Merges results from both VectorRAG and GraphRAG
-- Supports multiple merge strategies (weighted, union, intersection, sequential)
-- Provides comprehensive retrieval with complementary strengths
-"""
-
 from typing import List, Dict, Any, Optional
 import logging
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage
 
 from .config import RAGConfig
 from .vector_rag import VectorRAG
@@ -37,8 +29,13 @@ class HybridRAG:
         self.config = config or RAGConfig()
         self.config.validate()
         
-        # Configure Gemini API
-        genai.configure(api_key=self.config.gemini_api_key)
+        # Initialize Chat model
+        self.llm = ChatGoogleGenerativeAI(
+            model=self.config.model_name,
+            google_api_key=self.config.gemini_api_key,
+            temperature=self.config.temperature,
+            max_output_tokens=self.config.max_output_tokens
+        )
         
         # Initialize sub-systems
         logger.info("Initializing VectorRAG subsystem...")
@@ -352,16 +349,8 @@ Answer:"""
         
         # Generate response using Gemini
         try:
-            model = genai.GenerativeModel(self.config.model_name)
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=self.config.temperature,
-                    max_output_tokens=self.config.max_output_tokens
-                )
-            )
-            
-            answer = response.text
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            answer = response.content
             logger.info(f"Generated answer: {len(answer)} characters")
             return answer
             
