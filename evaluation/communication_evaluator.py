@@ -12,7 +12,9 @@ from typing import List, Dict, Any
 import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
+from typing import Union
 
+from ragc_core.document_processor import DocumentProcessor
 from .agents import StudentAgent
 
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +42,7 @@ class CommunicationEvaluator:
             google_api_key=self.api_key,
             temperature=0
         )
+        self.doc_processor = DocumentProcessor()
         
     def generate_questions_from_doc(self, doc_text: str, num_questions: int = 3) -> List[Dict[str, str]]:
         """
@@ -106,31 +109,40 @@ class CommunicationEvaluator:
             logger.error(f"Grading failed: {e}")
             return {"score": 0, "explanation": "Grading failed"}
 
-    def evaluate_communication(self, doc_path: str, student_persona: str = "Novice") -> Dict[str, Any]:
+    def evaluate_communication(self, doc_path: Union[str, List[str]], student_persona: str = "Novice") -> Dict[str, Any]:
         """
-        Run the full evaluation loop for a document
+        Run the full evaluation loop for a document or list of documents (aggregated)
         """
-        logger.info(f"Evaluating communication for {doc_path} with persona: {student_persona}...")
+        if isinstance(doc_path, list):
+            doc_display_name = f"Combined ({len(doc_path)} files)"
+            paths = doc_path
+        else:
+            doc_display_name = doc_path
+            paths = [doc_path]
+            
+        logger.info(f"Evaluating communication for {doc_display_name} with persona: {student_persona}...")
         
-        # 1. Read document
-        # 1. Read document with encoding fallback
-        encodings = ['utf-8', 'euc-kr', 'cp949', 'latin1']
-        doc_text = None
-        read_error = None
+        # 1. Read documents using DocumentProcessor
+        combined_text = ""
+        loaded_files = []
         
-        for enc in encodings:
+        for path in paths:
             try:
-                with open(doc_path, 'r', encoding=enc) as f:
-                    doc_text = f.read()
-                break
-            except UnicodeDecodeError:
-                continue
+                # Use DocumentProcessor to handle various formats (including PPTX)
+                logger.info(f"Loading document: {path} (type: {type(path)})")
+                text = self.doc_processor.load_document(path)
+                combined_text += f"\n\n--- Document: {os.path.basename(path)} ---\n\n" + text
+                loaded_files.append(path)
             except Exception as e:
-                read_error = str(e)
-                break
+                error_msg = f"Failed to read {path} (type: {type(path)}): {e}"
+                logger.error(error_msg)
+                # Return error immediately for debugging
+                return {"error": error_msg}
         
-        if doc_text is None:
-            return {"error": f"Failed to read file with tried encodings ({encodings}). Last error: {read_error}"}
+        if not combined_text:
+            return {"error": f"Failed to read any content from provided paths."}
+            
+        doc_text = combined_text
             
         # 2. Generate questions (Examiner)
         qa_pairs = self.generate_questions_from_doc(doc_text)
@@ -189,7 +201,7 @@ class CommunicationEvaluator:
         avg_score = total_score / len(results) if results else 0
         
         return {
-            "document": doc_path,
+            "document": doc_display_name,
             "student_persona": student_persona,
             "average_score": avg_score,
             "details": results

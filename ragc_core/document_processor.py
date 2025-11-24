@@ -68,6 +68,8 @@ class DocumentProcessor:
             return self._load_text(file_path)
         elif file_ext in ['.html', '.htm']:
             return self._load_html(file_path)
+        elif file_ext == '.pptx':
+            return self._load_pptx(file_path)
         else:
             raise ValueError(f"Unsupported file format: {file_ext}")
     
@@ -125,6 +127,38 @@ class DocumentProcessor:
             raise
         except Exception as e:
             logger.error(f"Error loading DOCX: {str(e)}")
+            raise
+
+    def _load_pptx(self, file_path: str) -> str:
+        """
+        Load PPTX document
+        
+        Args:
+            file_path: Path to PPTX file
+            
+        Returns:
+            str: Extracted text
+        """
+        try:
+            from pptx import Presentation
+            
+            prs = Presentation(file_path)
+            text_content = []
+            
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        text_content.append(shape.text)
+            
+            text = "\n".join(text_content)
+            logger.info(f"Successfully loaded PPTX: {len(text)} characters")
+            return text
+            
+        except ImportError:
+            logger.error("python-pptx not installed. Install with: pip install python-pptx")
+            raise
+        except Exception as e:
+            logger.error(f"Error loading PPTX: {str(e)}")
             raise
     
     def _load_text(self, file_path: str) -> str:
@@ -320,7 +354,7 @@ def get_supported_formats() -> List[str]:
     Returns:
         List[str]: Supported file extensions
     """
-    return ['.pdf', '.docx', '.txt', '.md', '.html', '.htm']
+    return ['.pdf', '.docx', '.txt', '.md', '.html', '.htm', '.pptx']
 
 
 def is_supported_format(file_path: str) -> bool:

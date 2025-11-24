@@ -348,6 +348,12 @@ def main():
             if st.checkbox("Select All Documents"):
                 selected_docs = available_docs
             
+            # Option to aggregate documents
+            aggregate_docs = st.checkbox(
+                "Evaluate as Single Topic", 
+                help="If checked, all selected documents will be combined and evaluated as one comprehensive topic."
+            )
+            
             # Student Persona Selector
             student_persona = st.selectbox(
                 "Select Student Persona",
@@ -380,11 +386,18 @@ def main():
                         try:
                             evaluator = CommunicationEvaluator(agent_url=agent_url)
                             
-                            for idx, doc_path in enumerate(selected_docs):
-                                st.text(f"Processing {os.path.basename(doc_path)}...")
-                                result = evaluator.evaluate_communication(doc_path, student_persona=selected_persona)
+                            if aggregate_docs and len(selected_docs) > 1:
+                                st.text(f"Processing {len(selected_docs)} documents as a single topic...")
+                                st.text(f"Debug: selected_docs type = {type(selected_docs)}, content = {selected_docs}")
+                                result = evaluator.evaluate_communication(selected_docs, student_persona=selected_persona)
                                 all_results.append(result)
-                                progress_bar.progress((idx + 1) / len(selected_docs))
+                                progress_bar.progress(1.0)
+                            else:
+                                for idx, doc_path in enumerate(selected_docs):
+                                    st.text(f"Processing {os.path.basename(doc_path)}...")
+                                    result = evaluator.evaluate_communication(doc_path, student_persona=selected_persona)
+                                    all_results.append(result)
+                                    progress_bar.progress((idx + 1) / len(selected_docs))
                             
                             st.session_state.comm_eval_results = all_results
                             st.success("Simulation Complete!")
@@ -425,27 +438,6 @@ def main():
                     display_comm_results(results_list[0])
             else:
                 st.info("Select documents and start simulation to see results.")
-
-def display_comm_results(results):
-    """Helper to display results for a single document"""
-    # Check for error
-    if "error" in results:
-        st.error(f"Error processing document: {results['error']}")
-        return
-
-    avg = results.get('average_score', 0)
-    doc_name = os.path.basename(results.get('document', 'Unknown Document'))
-    st.markdown(f"**Document:** `{doc_name}` (Score: {avg:.1f}/10)")
-    
-    for i, detail in enumerate(results.get("details", [])):
-        with st.expander(f"Q{i+1}: {detail.get('exam_question', 'Unknown Question')}", expanded=True):
-            st.markdown(f"**📝 Exam Question:** {detail.get('exam_question', '')}")
-            st.markdown(f"**🗣️ Student Asked:** {detail.get('student_question', '')}")
-            st.info(f"**🤖 Teacher Answered:** {detail.get('teacher_answer', '')}")
-            st.markdown(f"**🎓 Student Exam Answer:**\n> {detail.get('student_exam_answer', '')}")
-            st.markdown(f"**✅ Ground Truth:**\n> {detail.get('ground_truth', '')}")
-            st.markdown(f"**📝 Examiner Grade:** {detail.get('score', 0)}/10")
-            st.caption(f"Explanation: {detail.get('explanation', '')}")
 
     # ==================== Tab 3: RAGAS Evaluation ====================
     with tab3:
@@ -523,6 +515,29 @@ def display_comm_results(results):
                 st.dataframe(pd.DataFrame(res))
             else:
                 st.info("Upload file and run evaluation to see RAGAS metrics.")
+
+def display_comm_results(results):
+    """Helper to display results for a single document"""
+    # Check for error
+    if "error" in results:
+        st.error(f"Error processing document: {results['error']}")
+        return
+
+    avg = results.get('average_score', 0)
+    doc_name = os.path.basename(results.get('document', 'Unknown Document'))
+    st.markdown(f"**Document:** `{doc_name}` (Score: {avg:.1f}/10)")
+    
+    for i, detail in enumerate(results.get("details", [])):
+        with st.expander(f"Q{i+1}: {detail.get('exam_question', 'Unknown Question')}", expanded=True):
+            st.markdown(f"**📝 Exam Question:** {detail.get('exam_question', '')}")
+            st.markdown(f"**🗣️ Student Asked:** {detail.get('student_question', '')}")
+            st.info(f"**🤖 Teacher Answered:** {detail.get('teacher_answer', '')}")
+            st.markdown(f"**🎓 Student Exam Answer:**\n> {detail.get('student_exam_answer', '')}")
+            st.markdown(f"**✅ Ground Truth:**\n> {detail.get('ground_truth', '')}")
+            st.markdown(f"**📝 Examiner Grade:** {detail.get('score', 0)}/10")
+            st.caption(f"Explanation: {detail.get('explanation', '')}")
+
+
 
 
 if __name__ == "__main__":
