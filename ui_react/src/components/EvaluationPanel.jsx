@@ -48,18 +48,32 @@ const EvaluationPanel = () => {
         );
     };
 
+    const [error, setError] = useState(null);
+
     const handleEvaluate = async () => {
         if (selectedDocs.length === 0) return;
 
+        console.log("Starting evaluation...");
         setEvaluating(true);
         setResults(null);
+        setError(null);
 
         try {
             const data = await evaluateCommunication(selectedDocs, persona, aggregate, evaluationFile);
+            console.log("Evaluation response data:", data);
+
             // Store the full response which includes progress_logs
-            setResults(data.results || [data]); // Handle both single and multiple results
+            const processedResults = data.results || [data];
+            console.log("Processed results to set:", processedResults);
+
+            if (processedResults.length === 0) {
+                setError("No evaluation results returned. Please check the backend logs.");
+            }
+
+            setResults(processedResults);
         } catch (error) {
-            console.error(error);
+            console.error("Evaluation error:", error);
+            setError("Evaluation failed. Please try again. " + (error.response?.data?.detail || error.message));
         } finally {
             setEvaluating(false);
         }
@@ -127,9 +141,25 @@ const EvaluationPanel = () => {
 
                             {/* Evaluation File Upload */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Evaluation Questions (Optional)
-                                </label>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-gray-700">
+                                        Evaluation Questions (Optional)
+                                    </label>
+                                    <div className="relative group">
+                                        <AlertCircle size={16} className="text-gray-400 cursor-help" />
+                                        <div className="absolute right-0 bottom-full mb-2 w-80 p-3 bg-gray-800 text-white text-xs rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                            <p className="font-bold mb-1">Recommended Format (JSON):</p>
+                                            <pre className="bg-gray-900 p-2 rounded text-gray-300 overflow-x-auto">
+                                                {`[
+  {
+    "query": "Question text...",
+    "ground_truth": "Expected answer..."
+  }
+]`}
+                                            </pre>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div className="space-y-2">
                                     <input
                                         ref={fileInputRef}
@@ -223,7 +253,14 @@ const EvaluationPanel = () => {
 
                     {/* Results Column */}
                     <div className="lg:col-span-2">
-                        {!results && !evaluating && (
+                        {error && (
+                            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
+                                <AlertCircle size={20} />
+                                <p>{error}</p>
+                            </div>
+                        )}
+
+                        {!results && !evaluating && !error && (
                             <div className="h-full flex flex-col items-center justify-center text-gray-400 p-12 border-2 border-dashed border-gray-200 rounded-xl">
                                 <Award size={48} className="mb-4 opacity-50" />
                                 <p>Select documents and start evaluation to see results</p>
@@ -241,14 +278,15 @@ const EvaluationPanel = () => {
                         {results && (
                             <div className="space-y-6">
                                 {/* Progress Logs */}
-                                {results.progress_logs && results.progress_logs.length > 0 && (
+                                {/* Progress Logs */}
+                                {results && results.length > 0 && results[0].progress_logs && (
                                     <div className="bg-gray-900 text-gray-100 p-6 rounded-xl border border-gray-700 shadow-lg font-mono text-sm">
                                         <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
                                             <FileText size={20} />
                                             Evaluation Progress Log
                                         </h3>
                                         <div className="space-y-1 max-h-96 overflow-y-auto">
-                                            {results.progress_logs.map((log, idx) => (
+                                            {results[0].progress_logs.map((log, idx) => (
                                                 <div key={idx} className="text-gray-300 leading-relaxed whitespace-pre-wrap">
                                                     {log}
                                                 </div>
@@ -259,45 +297,88 @@ const EvaluationPanel = () => {
 
                                 {/* Summary Card */}
                                 {results && results.map((evalResult, evalIdx) => (
-                                    <div key={evalIdx} className="space-y-4">
+                                    <div key={evalIdx} className="space-y-6">
+                                        {/* Document Header */}
+                                        <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6 flex justify-between items-center">
+                                            <div>
+                                                <h3 className="font-bold text-xl text-gray-800 flex items-center gap-2">
+                                                    <BookOpen size={24} className="text-blue-600" />
+                                                    {evalResult.document}
+                                                </h3>
+                                                <p className="text-gray-500 mt-1">Persona: {evalResult.student_persona}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-3xl font-bold text-blue-600">{evalResult.average_score?.toFixed(1)}<span className="text-lg text-gray-400">/10</span></div>
+                                                <div className="text-sm text-gray-500">Average Score</div>
+                                            </div>
+                                        </div>
+
                                         {evalResult.details && evalResult.details.map((res, idx) => (
                                             <div key={idx} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                                                 <div className="p-6 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
                                                     <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                                                        <BookOpen size={20} className="text-blue-600" />
-                                                        {res.document}
+                                                        Question {idx + 1}
                                                     </h3>
-                                                    <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-bold">
-                                                        Score: {res.score}/100
+                                                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${res.grade >= 8 ? 'bg-green-100 text-green-700' :
+                                                            res.grade >= 5 ? 'bg-yellow-100 text-yellow-700' :
+                                                                'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        Score: {res.grade}/10
                                                     </div>
                                                 </div>
 
                                                 <div className="p-6 space-y-6">
-                                                    {/* Q&A Flow */}
-                                                    <div className="space-y-4">
-                                                        {res.conversation?.map((turn, i) => (
-                                                            <div key={i} className="space-y-2">
-                                                                <div className="flex gap-3">
-                                                                    <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">Q</div>
-                                                                    <p className="text-gray-800 font-medium pt-1">{turn.question}</p>
-                                                                </div>
-                                                                <div className="flex gap-3">
-                                                                    <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">A</div>
-                                                                    <p className="text-gray-600 text-sm leading-relaxed pt-1">{turn.answer}</p>
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                    {/* Exam Question */}
+                                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
+                                                        <span className="text-xs font-bold text-blue-600 uppercase tracking-wide block mb-1">Exam Question</span>
+                                                        <p className="text-gray-800 font-medium">{res.exam_question}</p>
                                                     </div>
 
-                                                    {/* Feedback */}
-                                                    {res.feedback && (
-                                                        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-100 rounded-lg">
-                                                            <h4 className="font-semibold text-yellow-800 mb-2 flex items-center gap-2">
-                                                                <AlertCircle size={16} /> Examiner Feedback
-                                                            </h4>
-                                                            <p className="text-sm text-yellow-700">{res.feedback}</p>
+                                                    {/* Student Question */}
+                                                    <div className="flex gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0 font-bold">
+                                                            <User size={20} />
                                                         </div>
-                                                    )}
+                                                        <div className="flex-1">
+                                                            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide block mb-1">Student Asks</span>
+                                                            <p className="text-gray-800">{res.student_question}</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Teacher Answer */}
+                                                    <div className="flex gap-4 pl-8 border-l-2 border-gray-100 ml-5 py-2">
+                                                        <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0 font-bold">
+                                                            <BookOpen size={16} />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <span className="text-xs font-bold text-green-600 uppercase tracking-wide block mb-1">Teacher Answers</span>
+                                                            <div className="text-gray-600 text-sm bg-gray-50 p-3 rounded-lg">
+                                                                {res.teacher_answer}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Student Exam Answer */}
+                                                    <div className="flex gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0 font-bold">
+                                                            <User size={20} />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide block mb-1">Student Exam Answer</span>
+                                                            <p className="text-gray-800">{res.student_exam_answer}</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Examiner Feedback */}
+                                                    <div className="pt-4 border-t border-gray-100 mt-4">
+                                                        <h4 className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                                            <Award size={18} className="text-yellow-500" />
+                                                            Examiner Feedback
+                                                        </h4>
+                                                        <p className="text-sm text-gray-600 bg-yellow-50 p-3 rounded border border-yellow-100">
+                                                            {res.explanation}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}

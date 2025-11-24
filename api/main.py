@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Union
 import os
+import json
 import shutil
 import logging
 from ragc_core.hybrid_rag import HybridRAG
@@ -249,7 +250,15 @@ async def evaluate_communication(
             logger.info(f"Using evaluation file: {evaluation_file.filename}")
             content = await evaluation_file.read()
             eval_data = json.loads(content)
-            qa_pairs = eval_data.get("questions", [])
+            
+            if isinstance(eval_data, list):
+                qa_pairs = eval_data
+            elif isinstance(eval_data, dict):
+                qa_pairs = eval_data.get("questions", [])
+            else:
+                logger.warning("Invalid evaluation file format. Expected list or dict.")
+                qa_pairs = []
+                
             logger.info(f"Loaded {len(qa_pairs)} pre-defined questions from evaluation file")
         
         # Initialize evaluator

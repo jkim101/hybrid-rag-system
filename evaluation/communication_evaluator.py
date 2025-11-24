@@ -9,11 +9,10 @@ import logging
 import requests
 import json
 import time
-from typing import List, Dict, Any
 import os
+from typing import List, Dict, Any, Union, Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
-from typing import Union
 
 from ragc_core.document_processor import DocumentProcessor
 from .agents import StudentAgent
@@ -229,9 +228,18 @@ class CommunicationEvaluator:
         total_score = 0
         
         for idx, item in enumerate(qa_pairs, 1):
-            exam_q = item["question"]
-            gt = item["answer"]
+            # Handle various key formats (case-insensitive)
+            item_lower = {k.lower(): v for k, v in item.items()}
             
+            # Prioritize standard RAG evaluation format: 'query' and 'ground_truth'
+            exam_q = item_lower.get("query") or item_lower.get("question") or item_lower.get("q")
+            gt = item_lower.get("ground_truth") or item_lower.get("answer") or item_lower.get("a")
+            
+            if not exam_q:
+                logger.warning(f"Skipping item {idx}: Missing 'query' or 'question' key. Keys found: {list(item.keys())}")
+                progress_logs.append(f"⚠️ Skipping question {idx}: Invalid format")
+                continue
+                
             progress_logs.append(f"\n📝 Question {idx}/{len(qa_pairs)}: {exam_q[:80]}...")
             
             # 3. Student asks Teacher (Representative Agent)
