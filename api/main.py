@@ -1,11 +1,13 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import os
+import shutil
 import logging
 from ragc_core.hybrid_rag import HybridRAG
 from ragc_core.config import RAGConfig
 from ragc_core.document_processor import DocumentProcessor
+from evaluation.communication_evaluator import CommunicationEvaluator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +25,8 @@ rag_system: Optional[HybridRAG] = None
 class QueryRequest(BaseModel):
     query: str
     top_k: Optional[int] = 5
+    rag_method: Optional[str] = "Hybrid RAG"
+    temperature: Optional[float] = 0.7
 
 class DocumentChunk(BaseModel):
     text: str
@@ -33,10 +37,17 @@ class QueryResponse(BaseModel):
     answer: str
     retrieved_documents: List[Dict[str, Any]]
     query: str
+    rag_method: str
 
 class RetrieveResponse(BaseModel):
     query: str
     documents: List[Dict[str, Any]]
+    rag_method: str
+
+class EvaluationRequest(BaseModel):
+    document_paths: List[str]
+    student_persona: str = "Novice"
+    aggregate: bool = False
 
 @app.on_event("startup")
 async def startup_event():
@@ -74,11 +85,15 @@ async def get_status():
         stats = rag_system.get_system_stats()
         return {
             "status": "ready",
+            "api_key_configured": True,
             "stats": stats
         }
     else:
+        # Check if API key is in env even if system failed to init
+        api_key_in_env = bool(os.getenv("GEMINI_API_KEY"))
         return {
             "status": "initializing_or_error",
+            "api_key_configured": api_key_in_env,
             "message": "RAG system not initialized"
         }
 
@@ -92,11 +107,17 @@ async def query_agent(request: QueryRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
     
     try:
-        result = rag_system.query(request.query, top_k=request.top_k)
+        result = rag_system.query(
+            request.query, 
+            top_k=request.top_k,
+            rag_method=request.rag_method,
+            temperature=request.temperature
+        )
         return QueryResponse(
             answer=result["answer"],
             retrieved_documents=result["retrieved_documents"],
-            query=request.query
+            query=request.query,
+            rag_method=request.rag_method
         )
     except Exception as e:
         logger.error(f"Query error: {e}")
@@ -112,10 +133,15 @@ async def retrieve_documents(request: QueryRequest):
         raise HTTPException(status_code=503, detail="Agent not initialized")
     
     try:
-        docs = rag_system.retrieve(request.query, top_k=request.top_k)
+        docs = rag_system.retrieve(
+            request.query, 
+            top_k=request.top_k,
+            rag_method=request.rag_method
+        )
         return RetrieveResponse(
             query=request.query,
-            documents=docs
+            documents=docs,
+            rag_method=request.rag_method
         )
     except Exception as e:
         logger.error(f"Retrieval error: {e}")
@@ -141,6 +167,120 @@ async def index_documents(background_tasks: BackgroundTasks, file_paths: List[st
         "files": valid_paths
     }
 
+@app.post("/upload")
+async def upload_files(background_tasks: BackgroundTasks, clear_existing: bool = False, files: List[UploadFile] = File(...)):
+    """
+    Upload files and trigger indexing.
+    Optionally clear existing documents before indexing.
+    """
+    if not rag_system:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    
+    # Clear existing documents if requested
+    if clear_existing:
+        logger.info("Clearing all existing documents before upload...")
+        rag_system.clear_all()
+        
+    upload_dir = "temp_uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    saved_paths = []
+    
+    try:
+        for file in files:
+            file_path = os.path.join(upload_dir, file.filename)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            saved_paths.append(os.path.abspath(file_path))
+            
+        # Trigger indexing in background
+        background_tasks.add_task(_process_and_index, saved_paths)
+        
+        mode = "Cleared existing and uploading" if clear_existing else "Appending"
+        return {
+            "message": f"{mode} {len(files)} files",
+            "files": [f.filename for f in files],
+            "clear_existing": clear_existing
+        }
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/clear")
+async def clear_all_documents():
+    """
+    Clear all documents from RAG system
+    """
+    if not rag_system:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    
+    try:
+        rag_system.clear_all()
+        logger.info("All documents cleared from RAG system")
+        return {
+            "message": "All documents cleared successfully",
+            "status": "success"
+        }
+    except Exception as e:
+        logger.error(f"Clear error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/evaluate")
+async def evaluate_communication(
+    document_paths: str = Form(...),  # JSON string
+    student_persona: str = Form("Novice"),
+    aggregate: bool = Form(False),
+    evaluation_file: Optional[UploadFile] = File(None)
+):
+    """
+    Evaluate communication effectiveness.
+    Supports both auto-generated questions and pre-defined evaluation.json.
+    """
+    if not rag_system:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    
+    try:
+        # Parse document paths from JSON string
+        paths = json.loads(document_paths)
+        
+        # Parse evaluation file if provided
+        qa_pairs = None
+        if evaluation_file:
+            logger.info(f"Using evaluation file: {evaluation_file.filename}")
+            content = await evaluation_file.read()
+            eval_data = json.loads(content)
+            qa_pairs = eval_data.get("questions", [])
+            logger.info(f"Loaded {len(qa_pairs)} pre-defined questions from evaluation file")
+        
+        # Initialize evaluator
+        doc_processor = DocumentProcessor()
+        evaluator = CommunicationEvaluator(rag_system, doc_processor)
+        
+        # Run evaluation
+        if aggregate or len(paths) > 1:
+            # Evaluate all documents together
+            result = evaluator.evaluate_communication(
+                paths, 
+                student_persona,
+                qa_pairs=qa_pairs
+            )
+            return {"results": [result]}
+        else:
+            # Evaluate each document separately
+            results = []
+            for path in paths:
+                result = evaluator.evaluate_communication(
+                    path, 
+                    student_persona,
+                    qa_pairs=qa_pairs
+                )
+                results.append(result)
+            return {"results": results}
+            
+    except Exception as e:
+        logger.error(f"Evaluation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 def _process_and_index(file_paths: List[str]):
     """Helper to process and index documents in background"""
     if not rag_system:
@@ -165,17 +305,14 @@ async def list_documents():
     
     try:
         # Access vector store directly to get document list
-        # Note: This depends on the implementation of VectorRAG
-        # We'll assume we can get count or list from stats
         stats = rag_system.get_system_stats()
-        count = stats["vector_rag"]["total_documents"]
+        files = rag_system.get_indexed_files()
         
-        # To get actual list, we might need to query the collection
-        # For now, we return the count and stats
         return {
-            "count": count,
+            "count": len(files),
+            "files": files,
             "stats": stats,
-            "message": "To see actual content, use the retrieve endpoint."
+            "message": f"Found {len(files)} indexed documents."
         }
     except Exception as e:
         logger.error(f"Failed to list documents: {e}")

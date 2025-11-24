@@ -1,0 +1,87 @@
+import axios from 'axios';
+
+const api = axios.create({
+    baseURL: '/', // Proxy handles the forwarding to localhost:8000
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
+
+export const checkStatus = async () => {
+    try {
+        const response = await api.get('/status');
+        return response.data;
+    } catch (error) {
+        console.error('Status check failed:', error);
+        throw error;
+    }
+};
+
+export const sendQuery = async (query, config = {}) => {
+    try {
+        const response = await api.post('/query', {
+            query,
+            top_k: config.topK || 5,
+            rag_method: config.ragMethod || "Hybrid RAG",
+            temperature: config.temperature || 0.7
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Query failed:', error);
+        throw error;
+    }
+};
+
+export const uploadFiles = async (files, clearExisting = false) => {
+    const formData = new FormData();
+    Array.from(files).forEach(file => {
+        formData.append('files', file);
+    });
+
+    try {
+        const response = await api.post(`/upload?clear_existing=${clearExisting}`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Upload failed:', error);
+        throw error;
+    }
+};
+
+export const evaluateCommunication = async (docPaths, persona, aggregate, evaluationFile = null) => {
+    try {
+        const formData = new FormData();
+        formData.append('document_paths', JSON.stringify(docPaths));
+        formData.append('student_persona', persona);
+        formData.append('aggregate', aggregate);
+
+        if (evaluationFile) {
+            formData.append('evaluation_file', evaluationFile);
+        }
+
+        const response = await api.post('/evaluate', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Evaluation failed:', error);
+        throw error;
+    }
+};
+
+export const getDocuments = async () => {
+    try {
+        const response = await api.get('/documents');
+        return response.data;
+    } catch (error) {
+        console.error('Failed to fetch documents:', error);
+        throw error;
+    }
+};
+
+export default api;

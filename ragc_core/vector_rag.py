@@ -257,6 +257,38 @@ Answer:"""
             "persist_directory": self.config.chroma_persist_directory
         }
     
+    def get_indexed_files(self) -> List[Dict[str, Any]]:
+        """
+        Get list of unique files indexed in the collection
+        
+        Returns:
+            List[Dict[str, Any]]: List of file metadata (filename, source, type)
+        """
+        try:
+            # Get all metadata
+            result = self.collection.get(include=['metadatas'])
+            metadatas = result['metadatas']
+            
+            if not metadatas:
+                return []
+            
+            # Extract unique files based on source path
+            unique_files = {}
+            for meta in metadatas:
+                source = meta.get('source')
+                if source and source not in unique_files:
+                    unique_files[source] = {
+                        'name': meta.get('filename', os.path.basename(source)),
+                        'path': source,
+                        'type': meta.get('file_type', '')
+                    }
+            
+            return list(unique_files.values())
+            
+        except Exception as e:
+            logger.error(f"Error getting indexed files: {str(e)}")
+            return []
+
     def delete_documents(self, ids: List[str]) -> None:
         """
         Delete documents by IDs

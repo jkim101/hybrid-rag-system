@@ -282,48 +282,58 @@ class HybridRAG:
         logger.info(f"Sequential merge: {len(merged_docs)} documents")
         return merged_docs
     
-    def retrieve(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: Optional[int] = None, rag_method: Optional[str] = "Hybrid RAG") -> List[Dict[str, Any]]:
         """
-        Retrieve relevant documents using hybrid approach
+        Retrieve relevant documents using specified approach
         
         Args:
             query: Query text
             top_k: Number of results to return
+            rag_method: Retrieval method ("Hybrid RAG", "Vector RAG", "Graph RAG")
             
         Returns:
             List[Dict[str, Any]]: Retrieved documents with scores
         """
         if top_k is None:
             top_k = self.config.top_k
+            
+        rag_method = rag_method or "Hybrid RAG"
+        logger.info(f"Retrieving with {rag_method} for query: {query[:100]}...")
         
-        logger.info(f"Hybrid retrieval for query: {query[:100]}...")
-        
-        # Retrieve from both systems
-        vector_docs = self.vector_rag.retrieve(query, top_k)
-        graph_docs = self.graph_rag.retrieve(query, top_k)
-        
-        # Merge results based on strategy
-        if self.config.merge_strategy == "weighted":
-            merged_docs = self._merge_weighted(vector_docs, graph_docs, top_k)
-        elif self.config.merge_strategy == "union":
-            merged_docs = self._merge_union(vector_docs, graph_docs, top_k)
-        elif self.config.merge_strategy == "intersection":
-            merged_docs = self._merge_intersection(vector_docs, graph_docs, top_k)
-        elif self.config.merge_strategy == "sequential":
-            merged_docs = self._merge_sequential(vector_docs, graph_docs, top_k)
-        else:
-            logger.warning(f"Unknown merge strategy: {self.config.merge_strategy}, using weighted")
-            merged_docs = self._merge_weighted(vector_docs, graph_docs, top_k)
-        
-        return merged_docs
+        if rag_method == "Vector RAG":
+            return self.vector_rag.retrieve(query, top_k)
+            
+        elif rag_method == "Graph RAG":
+            return self.graph_rag.retrieve(query, top_k)
+            
+        else: # Hybrid RAG
+            # Retrieve from both systems
+            vector_docs = self.vector_rag.retrieve(query, top_k)
+            graph_docs = self.graph_rag.retrieve(query, top_k)
+            
+            # Merge results based on strategy
+            if self.config.merge_strategy == "weighted":
+                merged_docs = self._merge_weighted(vector_docs, graph_docs, top_k)
+            elif self.config.merge_strategy == "union":
+                merged_docs = self._merge_union(vector_docs, graph_docs, top_k)
+            elif self.config.merge_strategy == "intersection":
+                merged_docs = self._merge_intersection(vector_docs, graph_docs, top_k)
+            elif self.config.merge_strategy == "sequential":
+                merged_docs = self._merge_sequential(vector_docs, graph_docs, top_k)
+            else:
+                logger.warning(f"Unknown merge strategy: {self.config.merge_strategy}, using weighted")
+                merged_docs = self._merge_weighted(vector_docs, graph_docs, top_k)
+            
+            return merged_docs
     
-    def generate(self, query: str, context_docs: List[Dict[str, Any]]) -> str:
+    def generate(self, query: str, context_docs: List[Dict[str, Any]], temperature: Optional[float] = None) -> str:
         """
         Generate answer using retrieved documents
         
         Args:
             query: User query
             context_docs: Retrieved documents
+            temperature: Optional temperature override
             
         Returns:
             str: Generated answer
@@ -349,7 +359,18 @@ Answer:"""
         
         # Generate response using Gemini
         try:
-            response = self.llm.invoke([HumanMessage(content=prompt)])
+            # Use dynamic temperature if provided, otherwise use config default
+            if temperature is not None and temperature != self.config.temperature:
+                llm = ChatGoogleGenerativeAI(
+                    model=self.config.model_name,
+                    google_api_key=self.config.gemini_api_key,
+                    temperature=temperature,
+                    max_output_tokens=self.config.max_output_tokens
+                )
+                response = llm.invoke([HumanMessage(content=prompt)])
+            else:
+                response = self.llm.invoke([HumanMessage(content=prompt)])
+                
             answer = response.content
             logger.info(f"Generated answer: {len(answer)} characters")
             return answer
@@ -358,30 +379,32 @@ Answer:"""
             logger.error(f"Error generating answer: {str(e)}")
             raise
     
-    def query(self, query: str, top_k: Optional[int] = None) -> Dict[str, Any]:
+    def query(self, query: str, top_k: Optional[int] = None, rag_method: Optional[str] = "Hybrid RAG", temperature: Optional[float] = None) -> Dict[str, Any]:
         """
         Complete RAG pipeline: retrieve and generate
         
         Args:
             query: User query
             top_k: Number of documents to retrieve
+            rag_method: Retrieval method
+            temperature: Generation temperature
             
         Returns:
             Dict[str, Any]: Answer and metadata
         """
         # Retrieve relevant documents
-        retrieved_docs = self.retrieve(query, top_k)
+        retrieved_docs = self.retrieve(query, top_k, rag_method)
         
         # Generate answer
-        answer = self.generate(query, retrieved_docs)
+        answer = self.generate(query, retrieved_docs, temperature)
         
         return {
             "answer": answer,
             "retrieved_documents": retrieved_docs,
             "num_documents": len(retrieved_docs),
             "query": query,
-            "method": "hybrid_rag",
-            "merge_strategy": self.config.merge_strategy
+            "method": rag_method,
+            "merge_strategy": self.config.merge_strategy if rag_method == "Hybrid RAG" else "N/A"
         }
     
     def get_system_stats(self) -> Dict[str, Any]:
@@ -401,6 +424,15 @@ Answer:"""
             "vector_weight": self.config.vector_weight,
             "graph_weight": self.config.graph_weight
         }
+    
+    def get_indexed_files(self) -> List[Dict[str, Any]]:
+        """
+        Get list of unique files indexed in the system
+        
+        Returns:
+            List[Dict[str, Any]]: List of file metadata
+        """
+        return self.vector_rag.get_indexed_files()
     
     def clear_all(self) -> None:
         """Clear all data from both subsystems"""
