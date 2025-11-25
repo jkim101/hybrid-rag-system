@@ -51,12 +51,13 @@ export const uploadFiles = async (files, clearExisting = false) => {
     }
 };
 
-export const evaluateCommunication = async (docPaths, persona, aggregate, evaluationFile = null) => {
+export const evaluateCommunication = async (docPaths, persona, aggregate, evaluationFile = null, compareMethods = false) => {
     try {
         const formData = new FormData();
         formData.append('document_paths', JSON.stringify(docPaths));
         formData.append('student_persona', persona);
         formData.append('aggregate', aggregate);
+        formData.append('compare_methods', compareMethods);
 
         if (evaluationFile) {
             formData.append('evaluation_file', evaluationFile);

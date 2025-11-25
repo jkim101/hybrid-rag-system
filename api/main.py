@@ -231,11 +231,13 @@ async def evaluate_communication(
     document_paths: str = Form(...),  # JSON string
     student_persona: str = Form("Novice"),
     aggregate: bool = Form(False),
+    compare_methods: bool = Form(False),
     evaluation_file: Optional[UploadFile] = File(None)
 ):
     """
     Evaluate communication effectiveness.
     Supports both auto-generated questions and pre-defined evaluation.json.
+    Can compare multiple RAG methods (Vector, Graph, Hybrid).
     """
     if not rag_system:
         raise HTTPException(status_code=503, detail="Agent not initialized")
@@ -265,26 +267,38 @@ async def evaluate_communication(
         doc_processor = DocumentProcessor()
         evaluator = CommunicationEvaluator(rag_system, doc_processor)
         
+        # Determine methods to evaluate
+        methods = ["Vector RAG", "Graph RAG", "Hybrid RAG"] if compare_methods else ["Hybrid RAG"]
+        logger.info(f"Running evaluation with methods: {methods}")
+        
+        all_results = []
+        
         # Run evaluation
         if aggregate or len(paths) > 1:
             # Evaluate all documents together
-            result = evaluator.evaluate_communication(
-                paths, 
-                student_persona,
-                qa_pairs=qa_pairs
-            )
-            return {"results": [result]}
+            for method in methods:
+                logger.info(f"Evaluating aggregated docs with {method}...")
+                result = evaluator.evaluate_communication(
+                    paths, 
+                    student_persona,
+                    qa_pairs=qa_pairs,
+                    rag_method=method
+                )
+                all_results.append(result)
         else:
             # Evaluate each document separately
-            results = []
             for path in paths:
-                result = evaluator.evaluate_communication(
-                    path, 
-                    student_persona,
-                    qa_pairs=qa_pairs
-                )
-                results.append(result)
-            return {"results": results}
+                for method in methods:
+                    logger.info(f"Evaluating {path} with {method}...")
+                    result = evaluator.evaluate_communication(
+                        path, 
+                        student_persona,
+                        qa_pairs=qa_pairs,
+                        rag_method=method
+                    )
+                    all_results.append(result)
+                    
+        return {"results": all_results}
             
     except Exception as e:
         logger.error(f"Evaluation error: {e}")

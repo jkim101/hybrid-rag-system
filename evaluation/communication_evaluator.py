@@ -84,40 +84,44 @@ class CommunicationEvaluator:
             return []
 
 
-    def ask_teacher(self, question: str) -> str:
+    def ask_teacher(self, question: str, rag_method: str = "Hybrid RAG") -> Dict[str, Any]:
         """
         Ask the teacher (RAG system) a question
         
         Args:
             question: Question to ask
+            rag_method: Retrieval method to use
             
         Returns:
-            str: Teacher's answer
+            Dict[str, Any]: Teacher's full response including answer and retrieved docs
         """
         if self.rag_system:
             # Direct call if running in same process
             try:
-                result = self.rag_system.query(question)
+                result = self.rag_system.query(question, rag_method=rag_method)
                 time.sleep(API_CALL_DELAY)  # Rate limiting
-                return result["answer"]
+                return result
             except Exception as e:
                 logger.error(f"Error querying RAG system directly: {e}")
-                return "I encountered an error while trying to answer that."
+                return {"answer": "I encountered an error while trying to answer that.", "retrieved_documents": []}
         else:
             # HTTP call if running remotely
             try:
                 response = requests.post(
                     f"{self.agent_url}/query",
-                    json={"query": question}
+                    json={
+                        "query": question,
+                        "rag_method": rag_method
+                    }
                 )
                 time.sleep(API_CALL_DELAY)  # Rate limiting
                 if response.status_code == 200:
-                    return response.json()["answer"]
+                    return response.json()
                 else:
-                    return "I encountered an error while trying to answer that."
+                    return {"answer": "I encountered an error while trying to answer that.", "retrieved_documents": []}
             except Exception as e:
                 logger.error(f"Error querying agent: {e}")
-                return "I encountered an error while trying to answer that."
+                return {"answer": "I encountered an error while trying to answer that.", "retrieved_documents": []}
 
     def grade_answer(self, question: str, student_answer: str, ground_truth: str) -> Dict[str, Any]:
         """
@@ -158,7 +162,8 @@ class CommunicationEvaluator:
         self, 
         doc_path: Union[str, List[str]], 
         student_persona: str = "Novice",
-        qa_pairs: Optional[List[Dict[str, str]]] = None
+        qa_pairs: Optional[List[Dict[str, str]]] = None,
+        rag_method: str = "Hybrid RAG"
     ) -> Dict[str, Any]:
         """
         Run the full evaluation loop for a document or list of documents (aggregated)
@@ -167,6 +172,7 @@ class CommunicationEvaluator:
             doc_path: Path(s) to document(s) to evaluate
             student_persona: Student difficulty level
             qa_pairs: Optional pre-defined questions/answers. If None, auto-generate from document.
+            rag_method: RAG method to evaluate ("Vector RAG", "Graph RAG", "Hybrid RAG")
         """
         progress_logs = []  # Track detailed progress
         
@@ -177,9 +183,10 @@ class CommunicationEvaluator:
             doc_display_name = doc_path
             paths = [doc_path]
             
-        logger.info(f"Evaluating communication for {doc_display_name} with persona: {student_persona}...")
+        logger.info(f"Evaluating communication for {doc_display_name} with persona: {student_persona} using {rag_method}...")
         progress_logs.append(f"📋 Starting evaluation for {doc_display_name}")
         progress_logs.append(f"👤 Student Persona: {student_persona}")
+        progress_logs.append(f"⚙️ RAG Method: {rag_method}")
         
         # Determine evaluation mode
         if qa_pairs:
@@ -226,6 +233,8 @@ class CommunicationEvaluator:
         
         results = []
         total_score = 0
+        total_retrieval_score = 0
+        retrieval_count = 0
         
         for idx, item in enumerate(qa_pairs, 1):
             # Handle various key formats (case-insensitive)
@@ -234,6 +243,7 @@ class CommunicationEvaluator:
             # Prioritize standard RAG evaluation format: 'query' and 'ground_truth'
             exam_q = item_lower.get("query") or item_lower.get("question") or item_lower.get("q")
             gt = item_lower.get("ground_truth") or item_lower.get("answer") or item_lower.get("a")
+            relevant_docs = item_lower.get("relevant_doc_ids") or item_lower.get("relevant_docs")
             
             if not exam_q:
                 logger.warning(f"Skipping item {idx}: Missing 'query' or 'question' key. Keys found: {list(item.keys())}")
@@ -249,10 +259,46 @@ class CommunicationEvaluator:
             progress_logs.append(f"  👨‍🎓 Student asks: {student_q[:80]}...")
             
             # 4. Teacher answers
-            progress_logs.append(f"  👨‍🏫 Teacher (RAG) answering...")
-            teacher_ans = self.ask_teacher(student_q)
+            progress_logs.append(f"  👨‍🏫 Teacher ({rag_method}) answering...")
+            teacher_response = self.ask_teacher(student_q, rag_method=rag_method)
+            teacher_ans = teacher_response.get("answer", "")
+            retrieved_docs = teacher_response.get("retrieved_documents", [])
+            
             logger.info(f"Teacher answered: {teacher_ans[:100]}...")
             progress_logs.append(f"  ✓ Teacher answered ({len(teacher_ans)} chars)")
+            
+            # Calculate Retrieval Accuracy if relevant_docs provided
+            retrieval_metric = None
+            if relevant_docs and isinstance(relevant_docs, list):
+                found_count = 0
+                # Normalize relevant docs to lowercase for comparison
+                relevant_docs_lower = [str(d).lower() for d in relevant_docs]
+                
+                # Check retrieved docs
+                found_docs = []
+                for doc in retrieved_docs:
+                    # Check filename in metadata
+                    meta = doc.get("metadata", {})
+                    filename = meta.get("filename", "").lower()
+                    source = meta.get("source", "").lower()
+                    
+                    # Check if any relevant doc ID is in filename or source
+                    for rel_doc in relevant_docs_lower:
+                        if rel_doc in filename or rel_doc in source:
+                            if rel_doc not in found_docs:
+                                found_docs.append(rel_doc)
+                                found_count += 1
+                
+                recall = found_count / len(relevant_docs) if relevant_docs else 0
+                retrieval_metric = {
+                    "found": found_count,
+                    "total": len(relevant_docs),
+                    "score": recall,
+                    "found_ids": found_docs
+                }
+                total_retrieval_score += recall
+                retrieval_count += 1
+                progress_logs.append(f"  🔍 Retrieval: Found {found_count}/{len(relevant_docs)} relevant docs")
             
             # 5. Student learns (Digests answer)
             progress_logs.append(f"  📚 Student learning from answer...")
@@ -276,7 +322,8 @@ class CommunicationEvaluator:
                 "teacher_answer": teacher_ans,
                 "student_exam_answer": student_exam_ans,
                 "grade": grade["score"],
-                "explanation": grade.get("explanation", "")
+                "explanation": grade.get("explanation", ""),
+                "retrieval_metric": retrieval_metric
             })
             
             total_score += grade["score"]
@@ -288,12 +335,18 @@ class CommunicationEvaluator:
                 time.sleep(QUESTION_DELAY)
             
         avg_score = total_score / len(results) if results else 0
+        avg_retrieval_score = total_retrieval_score / retrieval_count if retrieval_count > 0 else None
+        
         progress_logs.append(f"\n✅ Evaluation complete! Average score: {avg_score:.1f}/10")
+        if avg_retrieval_score is not None:
+            progress_logs.append(f"✅ Average Retrieval Recall: {avg_retrieval_score:.2f}")
         
         return {
             "document": doc_display_name,
             "student_persona": student_persona,
+            "rag_method": rag_method,
             "average_score": avg_score,
+            "average_retrieval_score": avg_retrieval_score,
             "details": results,
             "progress_logs": progress_logs
         }

@@ -15,14 +15,14 @@ A production-ready Hybrid Retrieval-Augmented Generation (RAG) system that combi
 - Automatic text cleaning and preprocessing
 
 ### User Interfaces
-- **Main UI**: Interactive web interface for document upload and querying
-- **Evaluation UI**: Comprehensive evaluation dashboard with metrics and comparisons
+- **React UI**: Modern, responsive web interface for document management and chat
+- **Evaluation Dashboard**: Integrated UI for comparing RAG methods and analyzing performance
 
 ### Evaluation Framework
-- **Retrieval Metrics**: Precision@K, Recall@K, F1@K, NDCG@K, MRR, MAP
-- **Generation Metrics**: Relevance, Faithfulness, Completeness
-- **Performance Metrics**: Latency measurements
-- Export results to CSV and JSON
+- **Multi-RAG Comparison**: Compare Vector, Graph, and Hybrid RAG side-by-side
+- **Retrieval Accuracy**: Calculate Recall based on relevant document IDs
+- **Communication Evaluation**: LLM-based grading of explanations for different personas
+- **Detailed Logs**: Step-by-step execution logs for debugging
 
 ## 📋 Requirements
 
@@ -33,15 +33,23 @@ A production-ready Hybrid Retrieval-Augmented Generation (RAG) system that combi
 
 ### Installation
 
-1. **Clone or extract the project**
+1. **Clone the repository**
 ```bash
+git clone <repository-url>
 cd hybrid-rag-system
 ```
 
-2. **Run the setup script**
+2. **Backend Setup**
 ```bash
-chmod +x setup.sh
-./setup.sh
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+3. **Frontend Setup**
+```bash
+cd ui_react
+npm install
 ```
 
 3. **Configure your API key**
@@ -69,35 +77,32 @@ cp .env.example .env
 
 ## 💻 Usage
 
-### Main Application
+### Running the Application
 
-Launch the interactive web interface:
-
+1. **Start the Backend Server**
 ```bash
-streamlit run ui/streamlit_app.py
+# From project root
+source venv/bin/activate
+uvicorn api.main:app --reload --port 8000
 ```
 
-**Note**: If you've set your API key in the `.env` file, it will be automatically loaded. Otherwise, you'll be prompted to enter it in the UI.
-
-Features:
-1. **Configure** RAG type (Vector, Graph, or Hybrid)
-2. **Upload** documents in supported formats
-3. **Query** your documents with natural language
-4. **View** statistics and system metrics
-
-### Evaluation Interface
-
-Run the evaluation dashboard:
-
+2. **Start the Frontend Development Server**
 ```bash
-streamlit run ui/evaluation_ui.py
+# From ui_react directory
+cd ui_react
+npm run dev
 ```
 
-Features:
-1. **Load** evaluation datasets
-2. **Compare** different RAG approaches
-3. **Analyze** comprehensive metrics
-4. **Export** results for reporting
+Access the application at `http://localhost:5173`.
+
+### Features
+1. **Document Management**: Upload and manage PDF, DOCX, PPTX, TXT files.
+2. **Chat Interface**: Ask questions using Hybrid RAG.
+3. **Evaluation Panel**:
+   - Select documents to evaluate.
+   - Choose student persona (Novice, Intermediate, Expert).
+   - Compare "Vector vs Graph vs Hybrid" RAG methods.
+   - View detailed scoring and retrieval recall.
 
 ### Python API
 
@@ -131,6 +136,8 @@ print(result["answer"])
 
 ```
 hybrid-rag-system/
+├── api/                    # FastAPI backend
+│   └── main.py            # API endpoints
 ├── ragc_core/              # Core RAG modules
 │   ├── __init__.py
 │   ├── config.py          # Configuration management
@@ -138,25 +145,17 @@ hybrid-rag-system/
 │   ├── vector_rag.py      # Vector-based RAG
 │   ├── graph_rag.py       # Graph-based RAG
 │   └── hybrid_rag.py      # Hybrid RAG combining both
-│
-├── ui/                     # User interfaces
-│   ├── streamlit_app.py   # Main application UI
-│   └── evaluation_ui.py   # Evaluation dashboard
-│
+├── ui_react/               # React Frontend
+│   ├── src/
+│   │   ├── components/    # React components
+│   │   └── api.js         # API integration
+│   └── package.json
 ├── evaluation/             # Evaluation framework
-│   ├── __init__.py
-│   ├── metrics.py         # Evaluation metrics
-│   └── evaluator.py       # RAG evaluator
-│
+│   ├── communication_evaluator.py # LLM-based evaluator
+│   └── ...
 ├── data/                   # Data directories
-│   ├── documents/         # Your documents
-│   └── evaluation/        # Evaluation datasets
-│
-├── chroma_db/             # ChromaDB persistence
-├── requirements.txt       # Python dependencies
-├── setup.sh              # Installation script
-├── .env.example          # Environment template
-└── README.md             # This file
+├── requirements.txt        # Python dependencies
+└── README.md               # This file
 ```
 
 ## ⚙️ Configuration
@@ -404,3 +403,28 @@ Built with:
 - Using production-grade databases
 - Implementing comprehensive error handling
 - Adding monitoring and logging
+
+## 🔮 Future Work
+
+The following tasks are planned for future development:
+
+1.  **Graph RAG Verification & Optimization**:
+    -   Deep dive into `graph_rag.py` to verify entity extraction quality.
+    -   Optimize graph traversal algorithms for better context retrieval.
+
+2.  **Agent Monitor Integration**:
+    -   Connect the `agent_monitor` dashboard to real-time system events.
+    -   Visualize the "thought process" of the RAG agent during query execution.
+
+3.  **Advanced RAG Techniques**:
+    -   **Query Rewriting**: Implement LLM-based query expansion/rewriting to improve retrieval.
+    -   **Re-ranking**: Add a Cross-Encoder re-ranking step after initial retrieval for higher precision.
+
+4.  **Deployment & DevOps**:
+    -   **Dockerization**: Create Dockerfiles for Backend and Frontend.
+    -   **CI/CD**: Set up automated testing and deployment pipelines.
+
+5.  **Vector DB Optimization**:
+    -   Explore other Vector DBs (e.g., Pinecone, Milvus) for scalability.
+    -   Optimize ChromaDB indexing parameters.
+

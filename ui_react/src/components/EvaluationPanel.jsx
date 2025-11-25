@@ -12,6 +12,8 @@ const EvaluationPanel = () => {
     const [aggregate, setAggregate] = useState(false);
     const [evaluating, setEvaluating] = useState(false);
     const [results, setResults] = useState(null);
+    const [compareMethods, setCompareMethods] = useState(false);
+    const [activeTab, setActiveTab] = useState("Hybrid RAG");
 
     // Evaluation file upload
     const [evaluationFile, setEvaluationFile] = useState(null);
@@ -59,7 +61,7 @@ const EvaluationPanel = () => {
         setError(null);
 
         try {
-            const data = await evaluateCommunication(selectedDocs, persona, aggregate, evaluationFile);
+            const data = await evaluateCommunication(selectedDocs, persona, aggregate, evaluationFile, compareMethods);
             console.log("Evaluation response data:", data);
 
             // Store the full response which includes progress_logs
@@ -71,6 +73,10 @@ const EvaluationPanel = () => {
             }
 
             setResults(processedResults);
+
+            // Set active tab to Hybrid RAG by default
+            setActiveTab("Hybrid RAG");
+
         } catch (error) {
             console.error("Evaluation error:", error);
             setError("Evaluation failed. Please try again. " + (error.response?.data?.detail || error.message));
@@ -94,6 +100,12 @@ const EvaluationPanel = () => {
             fileInputRef.current.value = '';
         }
     };
+
+    // Filter results based on active tab if comparing methods
+    const displayResults = results ? (compareMethods ? results.filter(r => r.rag_method === activeTab) : results) : null;
+
+    // Get available methods from results for tabs
+    const availableMethods = results ? [...new Set(results.map(r => r.rag_method || "Hybrid RAG"))].sort() : [];
 
     return (
         <div className="flex-1 p-8 bg-gray-50 h-screen overflow-y-auto">
@@ -127,7 +139,7 @@ const EvaluationPanel = () => {
                                     <div
                                         key={doc.id}
                                         onClick={() => toggleDoc(doc.path)}
-                                        className={`flex items - center gap - 3 p - 3 rounded - lg cursor - pointer transition - colors ${selectedDocs.includes(doc.path) ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'
+                                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${selectedDocs.includes(doc.path) ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent'
                                             } `}
                                     >
                                         {selectedDocs.includes(doc.path)
@@ -218,17 +230,32 @@ const EvaluationPanel = () => {
                                 </select>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                                <input
-                                    type="checkbox"
-                                    id="aggregate"
-                                    checked={aggregate}
-                                    onChange={(e) => setAggregate(e.target.checked)}
-                                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                                />
-                                <label htmlFor="aggregate" className="text-sm text-gray-700 select-none">
-                                    Evaluate as Single Topic
-                                </label>
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="aggregate"
+                                        checked={aggregate}
+                                        onChange={(e) => setAggregate(e.target.checked)}
+                                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                    />
+                                    <label htmlFor="aggregate" className="text-sm text-gray-700 select-none">
+                                        Evaluate as Single Topic
+                                    </label>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="compareMethods"
+                                        checked={compareMethods}
+                                        onChange={(e) => setCompareMethods(e.target.checked)}
+                                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                    />
+                                    <label htmlFor="compareMethods" className="text-sm text-gray-700 select-none font-medium text-indigo-600">
+                                        Compare RAG Methods
+                                    </label>
+                                </div>
                             </div>
 
                             <button
@@ -272,21 +299,42 @@ const EvaluationPanel = () => {
                                 <Loader2 size={48} className="text-blue-600 animate-spin mb-4" />
                                 <h3 className="text-xl font-semibold text-gray-800">Simulating Conversation...</h3>
                                 <p className="text-gray-500 mt-2">The teacher is explaining concepts to the {persona.toLowerCase()} student.</p>
+                                {compareMethods && (
+                                    <p className="text-sm text-indigo-500 mt-2 font-medium">Comparing Vector, Graph, and Hybrid RAG...</p>
+                                )}
                             </div>
                         )}
+
                         {/* Results Display */}
                         {results && (
                             <div className="space-y-6">
-                                {/* Progress Logs */}
-                                {/* Progress Logs */}
-                                {results && results.length > 0 && results[0].progress_logs && (
+                                {/* Tabs for Methods */}
+                                {compareMethods && availableMethods.length > 1 && (
+                                    <div className="flex space-x-2 border-b border-gray-200 pb-1 overflow-x-auto">
+                                        {availableMethods.map(method => (
+                                            <button
+                                                key={method}
+                                                onClick={() => setActiveTab(method)}
+                                                className={`px-4 py-2 rounded-t-lg font-medium text-sm transition-colors whitespace-nowrap ${activeTab === method
+                                                    ? 'bg-white text-blue-600 border border-gray-200 border-b-white -mb-px shadow-sm'
+                                                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {method}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Progress Logs (Only show for active tab or first result if not comparing) */}
+                                {displayResults && displayResults.length > 0 && displayResults[0].progress_logs && (
                                     <div className="bg-gray-900 text-gray-100 p-6 rounded-xl border border-gray-700 shadow-lg font-mono text-sm">
                                         <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
                                             <FileText size={20} />
-                                            Evaluation Progress Log
+                                            Evaluation Progress Log {compareMethods ? `(${activeTab})` : ''}
                                         </h3>
                                         <div className="space-y-1 max-h-96 overflow-y-auto">
-                                            {results[0].progress_logs.map((log, idx) => (
+                                            {displayResults[0].progress_logs.map((log, idx) => (
                                                 <div key={idx} className="text-gray-300 leading-relaxed whitespace-pre-wrap">
                                                     {log}
                                                 </div>
@@ -296,7 +344,7 @@ const EvaluationPanel = () => {
                                 )}
 
                                 {/* Summary Card */}
-                                {results && results.map((evalResult, evalIdx) => (
+                                {displayResults && displayResults.map((evalResult, evalIdx) => (
                                     <div key={evalIdx} className="space-y-6">
                                         {/* Document Header */}
                                         <div className="bg-white rounded-xl border border-blue-200 shadow-sm p-6 flex justify-between items-center">
@@ -305,11 +353,28 @@ const EvaluationPanel = () => {
                                                     <BookOpen size={24} className="text-blue-600" />
                                                     {evalResult.document}
                                                 </h3>
-                                                <p className="text-gray-500 mt-1">Persona: {evalResult.student_persona}</p>
+                                                <div className="flex gap-4 mt-1 text-sm text-gray-500">
+                                                    <span>Persona: {evalResult.student_persona}</span>
+                                                    {evalResult.rag_method && (
+                                                        <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-bold flex items-center">
+                                                            {evalResult.rag_method}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <div className="text-3xl font-bold text-blue-600">{evalResult.average_score?.toFixed(1)}<span className="text-lg text-gray-400">/10</span></div>
-                                                <div className="text-sm text-gray-500">Average Score</div>
+                                            <div className="flex gap-8 text-right">
+                                                {evalResult.average_retrieval_score !== undefined && evalResult.average_retrieval_score !== null && (
+                                                    <div>
+                                                        <div className="text-3xl font-bold text-green-600">
+                                                            {(evalResult.average_retrieval_score * 100).toFixed(0)}<span className="text-lg text-gray-400">%</span>
+                                                        </div>
+                                                        <div className="text-sm text-gray-500">Retrieval Recall</div>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div className="text-3xl font-bold text-blue-600">{evalResult.average_score?.toFixed(1)}<span className="text-lg text-gray-400">/10</span></div>
+                                                    <div className="text-sm text-gray-500">Average Score</div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -319,11 +384,21 @@ const EvaluationPanel = () => {
                                                     <h3 className="font-bold text-gray-800 flex items-center gap-2">
                                                         Question {idx + 1}
                                                     </h3>
-                                                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${res.grade >= 8 ? 'bg-green-100 text-green-700' :
+                                                    <div className="flex gap-3">
+                                                        {res.retrieval_metric && (
+                                                            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${res.retrieval_metric.score >= 0.7 ? 'bg-green-100 text-green-700' :
+                                                                    res.retrieval_metric.score >= 0.4 ? 'bg-yellow-100 text-yellow-700' :
+                                                                        'bg-red-100 text-red-700'
+                                                                }`}>
+                                                                Recall: {res.retrieval_metric.found}/{res.retrieval_metric.total}
+                                                            </div>
+                                                        )}
+                                                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-bold ${res.grade >= 8 ? 'bg-green-100 text-green-700' :
                                                             res.grade >= 5 ? 'bg-yellow-100 text-yellow-700' :
                                                                 'bg-red-100 text-red-700'
-                                                        }`}>
-                                                        Score: {res.grade}/10
+                                                            }`}>
+                                                            Score: {res.grade}/10
+                                                        </div>
                                                     </div>
                                                 </div>
 
