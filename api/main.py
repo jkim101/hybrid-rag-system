@@ -17,7 +17,7 @@ logger = logging.getLogger("representative_agent_api")
 app = FastAPI(
     title="Representative Agent API",
     description="API for communicating with the Representative Agent (Hybrid RAG System)",
-    version="1.0.0"
+    version="1.1.0"
 )
 
 # Global RAG system instance

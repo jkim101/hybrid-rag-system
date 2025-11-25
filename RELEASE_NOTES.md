@@ -1,5 +1,24 @@
 # Release Notes
 
+## v1.1.0 (2025-11-25) - UI Overhaul & Enhanced RAG Features
+
+### 🌟 New Features
+*   **Comprehensive UI Upgrade**: Complete redesign of the user interface with a modern dashboard layout.
+    *   **Dashboard**: System status overview and quick stats.
+    *   **Playground**: Advanced interactive chat with "Inspector Panel" to view retrieved chunks, scores, and RAG method details.
+    *   **Evaluation Studio**: Dedicated interface for managing datasets, running batch evaluations, and comparing results (Vector vs Graph vs Hybrid).
+    *   **Data Manager**: Enhanced document management with real-time upload progress (step-by-step checklist) and indexing status.
+    *   **Settings**: Global configuration for RAG parameters (Top-K, Temperature, RAG Method).
+*   **Dynamic RAG Method Selection**: Users can now switch between Hybrid, Vector, and Graph RAG modes on the fly within the Playground.
+*   **Real-time Feedback**: Improved visual feedback for background processing (chunking, embedding, graph building) with polling mechanisms.
+
+### 🛠️ Improvements
+*   **Global State Management**: Introduced `ConfigContext` for efficient application-wide state management.
+*   **Visual Polish**: Applied Glassmorphism effects and refined Tailwind CSS styling for a premium look.
+*   **Documentation**: Added detailed `walkthrough.md` and updated implementation plans.
+
+---
+
 ## v1.0.0 (2025-11-24) - Initial Major Release
 
 ### 🚀 Major Features
