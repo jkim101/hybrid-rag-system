@@ -8,6 +8,8 @@ import logging
 from ragc_core.hybrid_rag import HybridRAG
 from ragc_core.config import RAGConfig
 from ragc_core.document_processor import DocumentProcessor
+from ragc_core.lightrag_wrapper import LightRAGWrapper
+from ragc_core.llm_adapters import gemini_complete
 from evaluation.communication_evaluator import CommunicationEvaluator
 
 # Configure logging
@@ -17,17 +19,31 @@ logger = logging.getLogger("representative_agent_api")
 app = FastAPI(
     title="Representative Agent API",
     description="API for communicating with the Representative Agent (Hybrid RAG System)",
-    version="1.1.0"
+    version="1.8.0"
+)
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Global RAG system instance
 rag_system: Optional[HybridRAG] = None
+lightrag_wrapper: Optional[LightRAGWrapper] = None
 
 class QueryRequest(BaseModel):
     query: str
     top_k: Optional[int] = 5
     rag_method: Optional[str] = "Hybrid RAG"
     temperature: Optional[float] = 0.7
+    temperature: Optional[float] = 0.7
+    lightrag_mode: Optional[str] = "hybrid"
+    lightrag_top_k: Optional[int] = 60
 
 class DocumentChunk(BaseModel):
     text: str
@@ -50,9 +66,13 @@ class EvaluationRequest(BaseModel):
     student_persona: str = "Novice"
     aggregate: bool = False
 
+class AnalysisRequest(BaseModel):
+    query: str
+    evaluation_results: List[Dict[str, Any]]
+
 @app.on_event("startup")
 async def startup_event():
-    global rag_system
+    global rag_system, lightrag_wrapper
     logger.info("Initializing Representative Agent...")
     
     # Load configuration from environment variables
@@ -69,6 +89,15 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Failed to initialize Representative Agent: {e}")
         # We don't raise here to allow the server to start, but endpoints will fail
+        
+    # Initialize LightRAG
+    if config.enable_lightrag:
+        try:
+            logger.info("Initializing LightRAG...")
+            lightrag_wrapper = LightRAGWrapper(config)
+            await lightrag_wrapper.initialize()
+        except Exception as e:
+            logger.error(f"Failed to initialize LightRAG: {e}")
 
 @app.get("/")
 async def root():
@@ -114,6 +143,23 @@ async def query_agent(request: QueryRequest):
             rag_method=request.rag_method,
             temperature=request.temperature
         )
+        
+        if request.rag_method == "LightRAG":
+            if not lightrag_wrapper:
+                raise HTTPException(status_code=503, detail="LightRAG not initialized")
+                
+            result = lightrag_wrapper.query(
+                request.query,
+                mode=request.lightrag_mode,
+                top_k=request.lightrag_top_k
+            )
+            return QueryResponse(
+                answer=result["response"],
+                retrieved_documents=result.get("contexts", []), # LightRAG might not return contexts in same format
+                query=request.query,
+                rag_method=f"LightRAG ({request.lightrag_mode})"
+            )
+            
         return QueryResponse(
             answer=result["answer"],
             retrieved_documents=result["retrieved_documents"],
@@ -265,10 +311,10 @@ async def evaluate_communication(
         
         # Initialize evaluator
         doc_processor = DocumentProcessor()
-        evaluator = CommunicationEvaluator(rag_system, doc_processor)
+        evaluator = CommunicationEvaluator(rag_system, doc_processor, lightrag_wrapper=lightrag_wrapper)
         
         # Determine methods to evaluate
-        methods = ["Vector RAG", "Graph RAG", "Hybrid RAG"] if compare_methods else ["Hybrid RAG"]
+        methods = ["Vector RAG", "Graph RAG", "Hybrid RAG", "LightRAG"] if compare_methods else ["Hybrid RAG"]
         logger.info(f"Running evaluation with methods: {methods}")
         
         all_results = []
@@ -304,6 +350,41 @@ async def evaluate_communication(
         logger.error(f"Evaluation error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/analyze_evaluation")
+async def analyze_evaluation(request: AnalysisRequest):
+    """
+    Analyze evaluation results using LLM.
+    """
+    try:
+        # Format results for prompt
+        results_str = json.dumps(request.evaluation_results, indent=2)
+        
+        prompt = f"""
+        You are an expert evaluator analyzing the performance of RAG (Retrieval-Augmented Generation) systems.
+        
+        User Question: "{request.query}"
+        
+        Here are the evaluation results:
+        {results_str}
+        
+        Analyze the results and answer the user's question. 
+        Focus on:
+        1. Comparing scores between methods (Vector, Graph, Light, Hybrid).
+        2. Identifying patterns in retrieval accuracy (recall).
+        3. Explaining why certain methods might have performed better or worse based on the question types and answers.
+        4. Providing specific examples from the results to support your analysis.
+        
+        Keep your answer concise, professional, and insightful.
+        """
+        
+        analysis = await gemini_complete(prompt, temperature=0.7)
+        
+        return {"analysis": analysis}
+        
+    except Exception as e:
+        logger.error(f"Analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 def _process_and_index(file_paths: List[str]):
     """Helper to process and index documents in background"""
     if not rag_system:
@@ -313,6 +394,11 @@ def _process_and_index(file_paths: List[str]):
     try:
         chunks = processor.process_multiple_documents(file_paths)
         rag_system.add_documents(chunks)
+        
+        # Add to LightRAG if enabled
+        if lightrag_wrapper:
+            lightrag_wrapper.add_documents(chunks)
+            
         logger.info(f"Successfully indexed {len(chunks)} chunks from {len(file_paths)} files")
     except Exception as e:
         logger.error(f"Indexing error: {e}")
@@ -339,4 +425,18 @@ async def list_documents():
         }
     except Exception as e:
         logger.error(f"Failed to list documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/graph/data")
+async def get_graph_data(limit: int = 100):
+    """
+    Get graph nodes and edges for visualization.
+    """
+    if not rag_system:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    
+    try:
+        return rag_system.get_graph_data(limit)
+    except Exception as e:
+        logger.error(f"Failed to get graph data: {e}")
         raise HTTPException(status_code=500, detail=str(e))

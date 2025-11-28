@@ -65,3 +65,7 @@ Thumbs.db
 
 # Documents
 *.docx
+
+# LightRAG
+lightrag_storage/
+references/

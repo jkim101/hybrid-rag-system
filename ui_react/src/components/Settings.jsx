@@ -34,8 +34,8 @@ const Settings = () => {
                                     key={method}
                                     onClick={() => updateConfig({ ragMethod: method })}
                                     className={`p-4 rounded-xl border-2 text-left transition-all ${config.ragMethod === method
-                                            ? 'border-blue-500 bg-blue-50 text-blue-700'
-                                            : 'border-slate-100 hover:border-slate-200 text-slate-600'
+                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                        : 'border-slate-100 hover:border-slate-200 text-slate-600'
                                         }`}
                                 >
                                     <div className="font-bold mb-1">{method}</div>
@@ -127,6 +127,55 @@ const Settings = () => {
                             className="w-full accent-purple-600"
                         />
                         <p className="text-xs text-slate-400 mt-2">Controls randomness in the model's response (0 = deterministic, 1 = creative).</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* LightRAG Configuration */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2 font-semibold text-slate-700">
+                    <Database size={18} className="text-green-500" />
+                    LightRAG Configuration
+                </div>
+                <div className="p-6 space-y-6">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-3">
+                            Query Mode
+                        </label>
+                        <div className="grid grid-cols-5 gap-2">
+                            {['local', 'global', 'hybrid', 'mix', 'naive'].map((mode) => (
+                                <button
+                                    key={mode}
+                                    onClick={() => updateConfig({ lightragMode: mode })}
+                                    className={`p-3 rounded-lg border text-sm font-medium transition-all ${config.lightragMode === mode
+                                        ? 'border-green-500 bg-green-50 text-green-700'
+                                        : 'border-slate-200 hover:border-slate-300 text-slate-600'
+                                        }`}
+                                >
+                                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2">
+                            <strong>Local:</strong> Focus on specific entities. <strong>Global:</strong> High-level summary. <strong>Hybrid:</strong> Combine both.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="flex justify-between text-sm font-medium text-slate-700 mb-2">
+                            <span>LightRAG Top K</span>
+                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">{config.lightragTopK} contexts</span>
+                        </label>
+                        <input
+                            type="range"
+                            min="10"
+                            max="200"
+                            step="10"
+                            value={config.lightragTopK || 60}
+                            onChange={(e) => updateConfig({ lightragTopK: parseInt(e.target.value) })}
+                            className="w-full accent-green-600"
+                        />
+                        <p className="text-xs text-slate-400 mt-2">Number of context chunks to retrieve for LightRAG (usually higher than standard RAG).</p>
                     </div>
                 </div>
             </div>

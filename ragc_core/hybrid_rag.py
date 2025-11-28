@@ -440,3 +440,15 @@ Answer:"""
         self.vector_rag.clear_collection()
         self.graph_rag.clear_graph()
         logger.info("All data cleared")
+
+    def get_graph_data(self, limit: int = 100) -> Dict[str, Any]:
+        """
+        Get graph data for visualization
+        
+        Args:
+            limit: Maximum number of relationships to return
+            
+        Returns:
+            Dict[str, Any]: Nodes and links for visualization
+        """
+        return self.graph_rag.get_graph_data(limit)

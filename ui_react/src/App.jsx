@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard';
 import Playground from './components/Playground';
 import EvaluationStudio from './components/EvaluationStudio';
 import DataManager from './components/DataManager';
+import GraphExplorer from './components/GraphExplorer';
 import Settings from './components/Settings';
 import './App.css';
 
@@ -19,6 +20,7 @@ function App() {
             <Route path="/playground" element={<Playground />} />
             <Route path="/evaluation" element={<EvaluationStudio />} />
             <Route path="/data" element={<DataManager />} />
+            <Route path="/graph" element={<GraphExplorer />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

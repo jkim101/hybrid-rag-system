@@ -13,7 +13,10 @@ export const ConfigProvider = ({ children }) => {
         chunkSize: 1000,
         chunkOverlap: 200,
         vectorWeight: 0.5,
-        graphWeight: 0.5
+        vectorWeight: 0.5,
+        graphWeight: 0.5,
+        lightragMode: 'hybrid', // local, global, hybrid, mix, naive
+        lightragTopK: 60
     });
 
     // Load from localStorage on mount

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, FileText, CheckSquare, Square, ChevronRight, ChevronDown, Award, User, BookOpen, AlertCircle, Loader2, RefreshCw, Upload, X, BarChart2, Layers } from 'lucide-react';
-import { evaluateCommunication, getDocuments } from '../api';
+import { Play, FileText, CheckSquare, Square, ChevronRight, ChevronDown, Award, User, BookOpen, AlertCircle, Loader2, RefreshCw, Upload, X, BarChart2, Layers, MessageSquare, Send } from 'lucide-react';
+import { evaluateCommunication, getDocuments, analyzeEvaluation } from '../api';
 
 const EvaluationStudio = () => {
     // State
@@ -19,6 +19,13 @@ const EvaluationStudio = () => {
     const [results, setResults] = useState(null);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState("Hybrid RAG");
+
+    // Analysis Chat
+    const [showAnalysis, setShowAnalysis] = useState(false);
+    const [analysisInput, setAnalysisInput] = useState("");
+    const [analysisMessages, setAnalysisMessages] = useState([]);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const analysisEndRef = useRef(null);
 
     const fileInputRef = useRef(null);
 
@@ -91,8 +98,36 @@ const EvaluationStudio = () => {
         }
     };
 
+    const handleAnalysisSend = async (e) => {
+        e.preventDefault();
+        if (!analysisInput.trim() || isAnalyzing || !results) return;
+
+        const userMsg = { role: 'user', content: analysisInput };
+        setAnalysisMessages(prev => [...prev, userMsg]);
+        setAnalysisInput("");
+        setIsAnalyzing(true);
+
+        try {
+            const data = await analyzeEvaluation(analysisInput, results);
+            const aiMsg = { role: 'assistant', content: data.analysis };
+            setAnalysisMessages(prev => [...prev, aiMsg]);
+        } catch (error) {
+            console.error("Analysis error:", error);
+            setAnalysisMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I encountered an error analyzing the results." }]);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    useEffect(() => {
+        analysisEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [analysisMessages]);
+
     // Derived state for display
-    const availableMethods = results ? [...new Set(results.map(r => r.rag_method || "Hybrid RAG"))].sort() : [];
+    const availableMethods = results ? [...new Set(results.map(r => r.rag_method || "Hybrid RAG"))].sort((a, b) => {
+        const order = { 'Vector RAG': 1, 'Graph RAG': 2, 'LightRAG': 3, 'Hybrid RAG': 4 };
+        return (order[a] || 99) - (order[b] || 99);
+    }) : [];
     const displayResults = results ? (compareMethods ? results.filter(r => r.rag_method === activeTab) : results) : null;
 
     return (
@@ -216,8 +251,8 @@ const EvaluationStudio = () => {
                                     key={method}
                                     onClick={() => setActiveTab(method)}
                                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeTab === method
-                                            ? 'bg-white text-blue-600 shadow-sm'
-                                            : 'text-slate-500 hover:text-slate-700'
+                                        ? 'bg-white text-blue-600 shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-700'
                                         }`}
                                 >
                                     {method}
@@ -225,7 +260,69 @@ const EvaluationStudio = () => {
                             ))}
                         </div>
                     )}
+
+                    {results && (
+                        <button
+                            onClick={() => setShowAnalysis(!showAnalysis)}
+                            className={`ml-4 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${showAnalysis ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                        >
+                            <MessageSquare size={14} />
+                            {showAnalysis ? 'Hide Analysis' : 'Ask AI about Results'}
+                        </button>
+                    )}
                 </div>
+
+                {/* Analysis Chat Panel */}
+                {showAnalysis && results && (
+                    <div className="border-b border-slate-200 bg-slate-50 h-64 flex flex-col">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {analysisMessages.length === 0 && (
+                                <div className="text-center text-slate-400 text-sm py-4">
+                                    Ask questions like "Why is Vector RAG score lower?" or "Compare the methods."
+                                </div>
+                            )}
+                            {analysisMessages.map((msg, idx) => (
+                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] p-3 rounded-lg text-sm ${msg.role === 'user'
+                                            ? 'bg-blue-600 text-white rounded-tr-none'
+                                            : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'
+                                        }`}>
+                                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                                    </div>
+                                </div>
+                            ))}
+                            {isAnalyzing && (
+                                <div className="flex justify-start">
+                                    <div className="bg-white border border-slate-200 p-3 rounded-lg rounded-tl-none flex items-center gap-2 text-slate-500 text-sm">
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Analyzing results...
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={analysisEndRef} />
+                        </div>
+                        <div className="p-3 bg-white border-t border-slate-200">
+                            <form onSubmit={handleAnalysisSend} className="relative">
+                                <input
+                                    type="text"
+                                    value={analysisInput}
+                                    onChange={(e) => setAnalysisInput(e.target.value)}
+                                    placeholder="Ask about the evaluation results..."
+                                    className="w-full pl-4 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    disabled={isAnalyzing}
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!analysisInput.trim() || isAnalyzing}
+                                    className="absolute right-2 top-1.5 p-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+                                >
+                                    <Send size={16} />
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
 
                 {/* Content Area */}
                 <div className="flex-1 overflow-y-auto p-6">
@@ -304,7 +401,7 @@ const EvaluationStudio = () => {
                                                     <span className="font-semibold text-slate-700 text-sm">Question {qIdx + 1}</span>
                                                     <div className="flex gap-2">
                                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.grade >= 8 ? 'bg-green-100 text-green-700' :
-                                                                item.grade >= 5 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                                                            item.grade >= 5 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                                                             }`}>
                                                             Score: {item.grade}/10
                                                         </span>

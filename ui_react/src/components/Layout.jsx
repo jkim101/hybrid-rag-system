@@ -6,7 +6,8 @@ import {
     FileText,
     Database,
     Settings,
-    Activity
+    Activity,
+    Share2
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -16,6 +17,7 @@ const Layout = ({ children }) => {
         { path: '/', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/playground', label: 'Playground', icon: MessageSquare },
         { path: '/evaluation', label: 'Evaluation Studio', icon: Activity },
+        { path: '/graph', label: 'Graph Explorer', icon: Share2 },
         { path: '/data', label: 'Data Manager', icon: Database },
         { path: '/settings', label: 'Settings', icon: Settings },
     ];
@@ -40,8 +42,8 @@ const Layout = ({ children }) => {
                                 key={item.path}
                                 to={item.path}
                                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                                        ? 'bg-blue-50 text-blue-700'
-                                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                                     }`}
                             >
                                 <Icon size={18} />

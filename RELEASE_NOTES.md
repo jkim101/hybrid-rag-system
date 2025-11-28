@@ -1,5 +1,24 @@
 # Release Notes
 
+## v1.8.0 (2025-11-25) - LightRAG Integration
+
+### 🌟 New Features
+*   **LightRAG Integration**: Added LightRAG as a powerful third RAG option alongside Vector and Graph RAG.
+    *   **Dual-Level Retrieval**: Combines local (entity-based) and global (relationship-based) retrieval for comprehensive answers.
+    *   **5 Query Modes**: Support for `local`, `global`, `hybrid`, `mix`, and `naive` query modes.
+    *   **Advanced Knowledge Graph**: Automatic entity and relationship extraction using LLMs.
+*   **Enhanced Playground**:
+    *   Added LightRAG to the method selector.
+    *   Added dynamic "Mode" selector for LightRAG (Hybrid/Local/Global/Mix/Naive).
+    *   Updated greeting messages to reflect LightRAG capabilities.
+
+### 🛠️ Technical Changes
+*   **Core**: Implemented `LightRAGWrapper` and `Gemini` adapters for seamless integration.
+*   **Backend**: Updated API to support LightRAG initialization, indexing, and querying.
+*   **Configuration**: Added LightRAG-specific settings in `config.py`.
+
+---
+
 ## v1.1.0 (2025-11-25) - UI Overhaul & Enhanced RAG Features
 
 ### 🌟 New Features

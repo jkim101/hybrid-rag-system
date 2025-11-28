@@ -11,7 +11,8 @@ const Playground = () => {
         const descriptions = {
             'Hybrid RAG': 'I combine vector similarity and knowledge graph traversal for comprehensive retrieval.',
             'Vector RAG': 'I use semantic similarity search to find relevant information.',
-            'Graph RAG': 'I traverse knowledge graphs to find contextually connected information.'
+            'Graph RAG': 'I traverse knowledge graphs to find contextually connected information.',
+            'LightRAG': 'I use dual-level retrieval (local & global) with an advanced knowledge graph.'
         };
         return `Hello! I am your ${methodName} assistant. ${descriptions[methodName]} Configure my behavior in Settings, or just ask away!`;
     };
@@ -130,8 +131,27 @@ const Playground = () => {
                                 <option value="Hybrid RAG">Hybrid RAG</option>
                                 <option value="Vector RAG">Vector RAG</option>
                                 <option value="Graph RAG">Graph RAG</option>
+                                <option value="LightRAG">LightRAG</option>
                             </select>
                         </div>
+
+                        {/* LightRAG Mode Selector */}
+                        {localRagMethod === 'LightRAG' && (
+                            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 duration-300">
+                                <label className="text-xs text-slate-500 font-medium">Mode:</label>
+                                <select
+                                    value={config.lightragMode || 'hybrid'}
+                                    onChange={(e) => updateConfig({ lightragMode: e.target.value })}
+                                    className="text-xs px-2.5 py-1.5 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium text-slate-700"
+                                >
+                                    <option value="hybrid">Hybrid</option>
+                                    <option value="local">Local</option>
+                                    <option value="global">Global</option>
+                                    <option value="mix">Mix</option>
+                                    <option value="naive">Naive</option>
+                                </select>
+                            </div>
+                        )}
                         <span className="text-xs text-slate-400">Top-K: {config.topK}</span>
                     </div>
                 </div>

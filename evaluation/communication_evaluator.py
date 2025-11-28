@@ -29,7 +29,7 @@ class CommunicationEvaluator:
     Evaluates knowledge transfer to external agents.
     """
     
-    def __init__(self, rag_system=None, doc_processor=None, agent_url: str = "http://localhost:8000"):
+    def __init__(self, rag_system=None, doc_processor=None, agent_url: str = "http://localhost:8000", lightrag_wrapper=None):
         """
         Initialize evaluator
         
@@ -37,8 +37,10 @@ class CommunicationEvaluator:
             rag_system: Optional direct reference to HybridRAG instance
             doc_processor: Optional DocumentProcessor instance
             agent_url: URL of the Representative Agent (fallback if rag_system not provided)
+            lightrag_wrapper: Optional direct reference to LightRAGWrapper instance
         """
         self.rag_system = rag_system
+        self.lightrag_wrapper = lightrag_wrapper
         self.agent_url = agent_url
         self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
@@ -98,6 +100,20 @@ class CommunicationEvaluator:
         if self.rag_system:
             # Direct call if running in same process
             try:
+                if rag_method == "LightRAG":
+                    if self.lightrag_wrapper:
+                        # LightRAG query
+                        # Note: LightRAGWrapper.query returns dict with 'response' key
+                        result = self.lightrag_wrapper.query(question, mode="hybrid") # Default to hybrid mode for eval
+                        return {
+                            "answer": result["response"],
+                            "retrieved_documents": result.get("contexts", []),
+                            "rag_method": "LightRAG"
+                        }
+                    else:
+                        logger.warning("LightRAG requested but wrapper not provided")
+                        return {"answer": "LightRAG is not available.", "retrieved_documents": []}
+                
                 result = self.rag_system.query(question, rag_method=rag_method)
                 time.sleep(API_CALL_DELAY)  # Rate limiting
                 return result

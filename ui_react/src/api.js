@@ -23,7 +23,9 @@ export const sendQuery = async (query, config = {}) => {
             query,
             top_k: config.topK || 5,
             rag_method: config.ragMethod || "Hybrid RAG",
-            temperature: config.temperature || 0.7
+            temperature: config.temperature || 0.7,
+            lightrag_mode: config.lightragMode || 'hybrid',
+            lightrag_top_k: config.lightragTopK || 60
         });
         return response.data;
     } catch (error) {
@@ -81,6 +83,19 @@ export const getDocuments = async () => {
         return response.data;
     } catch (error) {
         console.error('Failed to fetch documents:', error);
+        throw error;
+    }
+};
+
+export const analyzeEvaluation = async (query, evaluationResults) => {
+    try {
+        const response = await api.post('/analyze_evaluation', {
+            query,
+            evaluation_results: evaluationResults
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Analysis failed:', error);
         throw error;
     }
 };

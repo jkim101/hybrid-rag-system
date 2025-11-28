@@ -2,7 +2,7 @@
 Graph RAG Module for Hybrid RAG System
 
 This module implements graph-based retrieval using:
-- NetworkX for knowledge graph construction
+- FalkorDB for knowledge graph storage and retrieval
 - Entity and relationship extraction
 - Graph traversal for contextual retrieval
 """
@@ -10,7 +10,7 @@ This module implements graph-based retrieval using:
 import re
 from typing import List, Dict, Any, Optional, Set, Tuple
 import logging
-import networkx as nx
+from falkordb import FalkorDB
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 
@@ -25,7 +25,7 @@ class GraphRAG:
     """
     Graph-based Retrieval Augmented Generation system
     
-    Uses NetworkX for knowledge graph construction and traversal
+    Uses FalkorDB for knowledge graph construction and traversal
     """
     
     def __init__(self, config: Optional[RAGConfig] = None):
@@ -46,13 +46,30 @@ class GraphRAG:
             max_output_tokens=self.config.max_output_tokens
         )
         
-        # Initialize knowledge graph
-        self.graph = nx.DiGraph()
-        
-        # Document storage (chunk_id -> chunk data)
-        self.documents = {}
-        
-        logger.info("GraphRAG initialized with empty knowledge graph")
+        # Connect to FalkorDB
+        try:
+            self.db = FalkorDB(host=self.config.falkordb_host, port=self.config.falkordb_port)
+            self.graph = self.db.select_graph("knowledge_graph")
+            logger.info(f"Connected to FalkorDB at {self.config.falkordb_host}:{self.config.falkordb_port}")
+        except Exception as e:
+            logger.error(f"Failed to connect to FalkorDB: {str(e)}")
+            # We don't raise here to allow instantiation even if DB is down, 
+            # but methods will fail.
+            self.graph = None
+            
+        if self.graph:
+            self._create_indices()
+    
+    def _create_indices(self):
+        """Create indices for optimization"""
+        try:
+            # Index on Entity name
+            self.graph.query("CREATE INDEX FOR (e:Entity) ON (e.name)")
+            # Index on Document id
+            self.graph.query("CREATE INDEX FOR (d:Document) ON (d.id)")
+        except Exception as e:
+            # Indices might already exist
+            logger.debug(f"Index creation note: {str(e)}")
     
     def _extract_entities(self, text: str) -> List[str]:
         """
@@ -108,7 +125,6 @@ class GraphRAG:
             for i, entity1 in enumerate(sentence_entities):
                 for entity2 in sentence_entities[i+1:]:
                     # Use simple "related_to" relationship
-                    # In production, use more sophisticated relationship extraction
                     relationships.append((entity1, "related_to", entity2))
         
         return relationships
@@ -123,6 +139,10 @@ class GraphRAG:
         if not chunks:
             logger.warning("No chunks provided to add_documents")
             return
+            
+        if not self.graph:
+            logger.error("FalkorDB connection not established")
+            return
         
         logger.info(f"Building knowledge graph from {len(chunks)} chunks...")
         
@@ -130,90 +150,49 @@ class GraphRAG:
             chunk_id = f"chunk_{i}_{chunk.get('chunk_id', i)}"
             text = chunk["text"]
             
-            # Store document
-            self.documents[chunk_id] = chunk
+            # Escape text for Cypher
+            safe_text = text.replace("'", "\\'")
+            
+            # Create Document node
+            # Using MERGE to avoid duplicates
+            query = f"""
+            MERGE (d:Document {{id: '{chunk_id}'}})
+            SET d.text = '{safe_text}'
+            """
+            # Add metadata properties if needed, for now just text
+            self.graph.query(query)
             
             # Extract entities
             entities = self._extract_entities(text)
             
-            # Add entities as nodes
+            # Add entities and link to document
             for entity in entities:
-                if not self.graph.has_node(entity):
-                    self.graph.add_node(entity, type="entity", documents=[])
-                
-                # Link entity to document
-                if chunk_id not in self.graph.nodes[entity]["documents"]:
-                    self.graph.nodes[entity]["documents"].append(chunk_id)
+                safe_entity = entity.replace("'", "\\'")
+                query = f"""
+                MERGE (e:Entity {{name: '{safe_entity}'}})
+                WITH e
+                MATCH (d:Document {{id: '{chunk_id}'}})
+                MERGE (e)-[:MENTIONED_IN]->(d)
+                """
+                self.graph.query(query)
             
             # Extract and add relationships
             relationships = self._extract_relationships(text, entities)
             for entity1, rel_type, entity2 in relationships:
-                if entity1 != entity2:  # Avoid self-loops
-                    self.graph.add_edge(
-                        entity1, 
-                        entity2, 
-                        relationship=rel_type,
-                        weight=1.0
-                    )
+                if entity1 != entity2:
+                    safe_e1 = entity1.replace("'", "\\'")
+                    safe_e2 = entity2.replace("'", "\\'")
+                    
+                    query = f"""
+                    MATCH (e1:Entity {{name: '{safe_e1}'}})
+                    MATCH (e2:Entity {{name: '{safe_e2}'}})
+                    MERGE (e1)-[:RELATED {{type: '{rel_type}'}}]->(e2)
+                    """
+                    self.graph.query(query)
         
-        logger.info(f"Knowledge graph built: {self.graph.number_of_nodes()} nodes, "
-                   f"{self.graph.number_of_edges()} edges")
-    
-    def _find_relevant_entities(self, query: str) -> List[str]:
-        """
-        Find entities in the graph relevant to the query
-        
-        Args:
-            query: Query text
-            
-        Returns:
-            List[str]: Relevant entity names
-        """
-        query_entities = self._extract_entities(query)
-        relevant_entities = []
-        
-        # Find exact matches
-        for entity in query_entities:
-            if entity in self.graph.nodes:
-                relevant_entities.append(entity)
-        
-        # Find partial matches
-        query_lower = query.lower()
-        for node in self.graph.nodes:
-            if node.lower() in query_lower or query_lower in node.lower():
-                if node not in relevant_entities:
-                    relevant_entities.append(node)
-        
-        return relevant_entities
-    
-    def _get_subgraph(self, entities: List[str], depth: int = 1) -> nx.DiGraph:
-        """
-        Get subgraph around entities
-        
-        Args:
-            entities: Starting entities
-            depth: Depth of graph traversal
-            
-        Returns:
-            nx.DiGraph: Subgraph
-        """
-        nodes_to_include = set(entities)
-        
-        # BFS to find neighboring nodes
-        for entity in entities:
-            if entity in self.graph:
-                # Get neighbors at specified depth
-                for _ in range(depth):
-                    neighbors = set()
-                    for node in nodes_to_include:
-                        if node in self.graph:
-                            neighbors.update(self.graph.neighbors(node))
-                            neighbors.update(self.graph.predecessors(node))
-                    nodes_to_include.update(neighbors)
-        
-        # Create subgraph
-        subgraph = self.graph.subgraph(nodes_to_include).copy()
-        return subgraph
+        # Get stats
+        stats = self.get_graph_stats()
+        logger.info(f"Knowledge graph updated: {stats['num_nodes']} nodes, {stats['num_edges']} edges")
     
     def retrieve(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         """
@@ -228,52 +207,78 @@ class GraphRAG:
         """
         if top_k is None:
             top_k = self.config.top_k
+            
+        if not self.graph:
+            logger.error("FalkorDB connection not established")
+            return []
         
         logger.info(f"Retrieving top {top_k} documents for query: {query[:100]}...")
         
-        # Find relevant entities
-        relevant_entities = self._find_relevant_entities(query)
+        # Extract entities from query
+        query_entities = self._extract_entities(query)
         
-        if not relevant_entities:
-            logger.warning("No relevant entities found in graph")
+        if not query_entities:
+            logger.warning("No entities found in query")
             return []
+            
+        # Find relevant documents via graph traversal
+        # Strategy:
+        # 1. Find Entity nodes matching query entities
+        # 2. Traverse to neighbors (related entities)
+        # 3. Collect linked Documents
+        # 4. Score documents based on number of connected relevant entities
         
-        logger.info(f"Found {len(relevant_entities)} relevant entities: {relevant_entities[:5]}")
-        
-        # Get subgraph around relevant entities
-        subgraph = self._get_subgraph(relevant_entities, depth=2)
-        
-        # Collect documents from relevant entities
         doc_scores = {}
-        for node in subgraph.nodes:
-            if "documents" in self.graph.nodes[node]:
-                for doc_id in self.graph.nodes[node]["documents"]:
-                    # Score based on entity relevance and graph centrality
-                    score = 1.0 if node in relevant_entities else 0.5
-                    
-                    # Boost score for nodes with higher degree (more connections)
-                    degree = self.graph.degree(node)
-                    score *= (1 + 0.1 * min(degree, 10))
-                    
-                    if doc_id in doc_scores:
-                        doc_scores[doc_id] = max(doc_scores[doc_id], score)
-                    else:
-                        doc_scores[doc_id] = score
         
-        # Sort by score and return top_k
-        sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        for entity in query_entities:
+            safe_entity = entity.replace("'", "\\'")
+            
+            # Cypher query to find connected documents matching the entity or its neighbors
+            # We look for documents mentioned by the entity directly, or by its neighbors (depth 1)
+            cypher_query = f"""
+            MATCH (e:Entity)
+            WHERE e.name = '{safe_entity}' OR e.name CONTAINS '{safe_entity}'
+            
+            // Direct documents
+            OPTIONAL MATCH (e)-[:MENTIONED_IN]->(d1:Document)
+            
+            // Neighbor documents
+            OPTIONAL MATCH (e)-[:RELATED]-(neighbor:Entity)-[:MENTIONED_IN]->(d2:Document)
+            
+            RETURN d1.id as d1_id, d1.text as d1_text, 
+                   d2.id as d2_id, d2.text as d2_text
+            """
+            
+            result = self.graph.query(cypher_query)
+            
+            for record in result.result_set:
+                # Process d1 (direct)
+                if record[0]: # d1_id
+                    doc_id = record[0]
+                    if doc_id not in doc_scores:
+                        doc_scores[doc_id] = {"score": 0, "text": record[1]}
+                    doc_scores[doc_id]["score"] += 1.0 # Higher weight for direct match
+                
+                # Process d2 (neighbor)
+                if record[2]: # d2_id
+                    doc_id = record[2]
+                    if doc_id not in doc_scores:
+                        doc_scores[doc_id] = {"score": 0, "text": record[3]}
+                    doc_scores[doc_id]["score"] += 0.5 # Lower weight for neighbor match
+        
+        # Format results
+        sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1]["score"], reverse=True)[:top_k]
         
         retrieved_docs = []
-        for rank, (doc_id, score) in enumerate(sorted_docs):
-            if doc_id in self.documents:
-                retrieved_docs.append({
-                    "text": self.documents[doc_id]["text"],
-                    "score": score,
-                    "metadata": {k: v for k, v in self.documents[doc_id].items() if k != "text"},
-                    "id": doc_id,
-                    "rank": rank + 1,
-                    "retrieval_type": "graph"
-                })
+        for rank, (doc_id, data) in enumerate(sorted_docs):
+            retrieved_docs.append({
+                "text": data["text"],
+                "score": data["score"],
+                "metadata": {"id": doc_id},
+                "id": doc_id,
+                "rank": rank + 1,
+                "retrieval_type": "graph"
+            })
         
         logger.info(f"Retrieved {len(retrieved_docs)} documents")
         return retrieved_docs
@@ -349,18 +354,37 @@ Answer:"""
         Returns:
             Dict[str, Any]: Graph statistics
         """
-        return {
-            "num_nodes": self.graph.number_of_nodes(),
-            "num_edges": self.graph.number_of_edges(),
-            "num_documents": len(self.documents),
-            "avg_degree": sum(dict(self.graph.degree()).values()) / max(self.graph.number_of_nodes(), 1)
-        }
+        if not self.graph:
+            return {"status": "not_connected"}
+            
+        try:
+            num_nodes = self.graph.query("MATCH (n) RETURN count(n)").result_set[0][0]
+            num_edges = self.graph.query("MATCH ()-[r]->() RETURN count(r)").result_set[0][0]
+            num_docs = self.graph.query("MATCH (d:Document) RETURN count(d)").result_set[0][0]
+            
+            return {
+                "num_nodes": num_nodes,
+                "num_edges": num_edges,
+                "num_documents": num_docs,
+                "backend": "falkordb"
+            }
+        except Exception as e:
+            logger.error(f"Error getting stats: {str(e)}")
+            return {"error": str(e)}
     
     def clear_graph(self) -> None:
         """Clear knowledge graph"""
-        self.graph.clear()
-        self.documents.clear()
-        logger.info("Knowledge graph cleared")
+        if not self.graph:
+            return
+            
+        try:
+            self.graph.delete()
+            # Re-select graph to create a fresh one (delete removes the key)
+            self.graph = self.db.select_graph("knowledge_graph")
+            self._create_indices()
+            logger.info("Knowledge graph cleared")
+        except Exception as e:
+            logger.error(f"Error clearing graph: {str(e)}")
     
     def export_graph(self, output_path: str) -> None:
         """
@@ -369,15 +393,7 @@ Answer:"""
         Args:
             output_path: Path to save graph
         """
-        import pickle
-        
-        with open(output_path, 'wb') as f:
-            pickle.dump({
-                'graph': self.graph,
-                'documents': self.documents
-            }, f)
-        
-        logger.info(f"Graph exported to {output_path}")
+        logger.warning("Graph export is not supported with FalkorDB backend. Data is persisted in the database.")
     
     def import_graph(self, input_path: str) -> None:
         """
@@ -386,11 +402,93 @@ Answer:"""
         Args:
             input_path: Path to graph file
         """
-        import pickle
+        logger.warning("Graph import is not supported with FalkorDB backend. Please re-index documents.")
+
+    def get_graph_data(self, limit: int = 100) -> Dict[str, Any]:
+        """
+        Get graph data for visualization
         
-        with open(input_path, 'rb') as f:
-            data = pickle.load(f)
-            self.graph = data['graph']
-            self.documents = data['documents']
-        
-        logger.info(f"Graph imported from {input_path}")
+        Args:
+            limit: Maximum number of relationships to return
+            
+        Returns:
+            Dict[str, Any]: Nodes and links for visualization
+        """
+        if not self.graph:
+            return {"nodes": [], "links": []}
+            
+        try:
+            # Query for nodes and relationships
+            query = f"""
+            MATCH (n)-[r]->(m)
+            RETURN n, r, m
+            LIMIT {limit}
+            """
+            result = self.graph.query(query)
+            
+            nodes = {}
+            links = []
+            
+            for record in result.result_set:
+                source_node = record[0]
+                rel = record[1]
+                target_node = record[2]
+                
+                # Process source node
+                # FalkorDB Node object has labels, properties, id
+                s_id = str(source_node.id)
+                if s_id not in nodes:
+                    # Determine label (Entity or Document)
+                    label = "Unknown"
+                    if "Entity" in source_node.labels:
+                        label = "Entity"
+                        name = source_node.properties.get("name", "Unknown")
+                    elif "Document" in source_node.labels:
+                        label = "Document"
+                        name = f"Doc {source_node.properties.get('id', 'Unknown')}"
+                    else:
+                        name = f"Node {s_id}"
+                        
+                    nodes[s_id] = {
+                        "id": s_id,
+                        "label": label,
+                        "name": name,
+                        "properties": source_node.properties
+                    }
+                
+                # Process target node
+                t_id = str(target_node.id)
+                if t_id not in nodes:
+                    label = "Unknown"
+                    if "Entity" in target_node.labels:
+                        label = "Entity"
+                        name = target_node.properties.get("name", "Unknown")
+                    elif "Document" in target_node.labels:
+                        label = "Document"
+                        name = f"Doc {target_node.properties.get('id', 'Unknown')}"
+                    else:
+                        name = f"Node {t_id}"
+                        
+                    nodes[t_id] = {
+                        "id": t_id,
+                        "label": label,
+                        "name": name,
+                        "properties": target_node.properties
+                    }
+                
+                # Process relationship
+                links.append({
+                    "source": s_id,
+                    "target": t_id,
+                    "type": rel.relation,
+                    "properties": rel.properties
+                })
+                
+            return {
+                "nodes": list(nodes.values()),
+                "links": links
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting graph data: {str(e)}")
+            return {"nodes": [], "links": [], "error": str(e)}

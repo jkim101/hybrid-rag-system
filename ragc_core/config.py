@@ -62,10 +62,25 @@ class RAGConfig:
     graph_max_entities: int = 100
     relationship_threshold: float = 0.6
     
+    # FalkorDB Configuration
+    falkordb_host: str = "localhost"
+    falkordb_port: int = 6379
+    
     # Hybrid Configuration
     vector_weight: float = 0.5
     graph_weight: float = 0.5
     merge_strategy: str = "weighted"  # Options: "weighted", "union", "intersection", "sequential"
+
+    # LightRAG Configuration
+    enable_lightrag: bool = True
+    lightrag_working_dir: str = "./lightrag_storage"
+    lightrag_chunk_token_size: int = 1200
+    lightrag_chunk_overlap_token_size: int = 100
+    lightrag_entity_extract_max_gleaning: int = 1
+    lightrag_query_mode: str = "hybrid"  # local, global, hybrid, mix, naive
+    lightrag_top_k: int = 60
+    lightrag_max_entity_tokens: int = 6000
+    lightrag_max_relation_tokens: int = 8000
 
     # Agent Configuration
     use_agents: bool = False  # Enable agent-based architecture
@@ -146,7 +161,12 @@ class RAGConfig:
             "agent_heartbeat_interval": self.agent_heartbeat_interval,
             "agent_timeout": self.agent_timeout,
             "enable_agent_cache": self.enable_agent_cache,
-            "agent_cache_ttl": self.agent_cache_ttl
+            "agent_cache_ttl": self.agent_cache_ttl,
+            "enable_lightrag": self.enable_lightrag,
+            "lightrag_working_dir": self.lightrag_working_dir,
+            "lightrag_query_mode": self.lightrag_query_mode,
+            "falkordb_host": self.falkordb_host,
+            "falkordb_port": self.falkordb_port
         }
     
     @classmethod
